@@ -14,10 +14,11 @@ env/
 # uv
 .uv/
 
-# Python version
-.python-version
+# NOTE: .python-version is intentionally tracked. It pins the interpreter for
+# uv, and without it a fresh clone resolves to the system Python, where
+# gensim 4.4.0 fails to build on 3.13+.
 
-# IDE
+# IDE</path>
 .vscode/
 .idea/
 *.swp
