@@ -1,0 +1,54 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+*bak
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+.uv/
+
+# Python version
+.python-version
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data and models (large files, not for version control)
+data/raw/
+data/processed/*.bin
+data/processed/*.gz
+data/*.bin
+data/*.gz
+!data/sample_examples.json
+!data/README.md
+!data/.gitkeep
+!data/processed/.gitkeep
+
+artifacts/
+.cache/
+
+# NLTK data
+.nltk_data/
+
+# Cache directories
+~/.cache/contextsense/
+
+# Environment files
+.env
+.env.local
+
+# Logs
+*.log
+
+# Streamlit
+.streamlit/secrets.toml
