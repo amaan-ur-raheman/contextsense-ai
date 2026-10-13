@@ -270,15 +270,22 @@ The default embedding backend uses Sentence Transformers. The model downloads au
 
 ### Word2Vec Model (Optional, Manual Download)
 
-The Word2Vec backend requires manual download of a large model (~3.6GB):
+The Word2Vec backend requires a manual download of a large model (~3.6 GB
+uncompressed, ~1.5 GB gzipped). The original Google-hosted copy has been
+retired, so the URL below points at a mirror of the same vectors:
 
 ```bash
 mkdir -p data/word2vec
-curl -o data/word2vec/GoogleNews-vectors-negative300.bin.gz \
-  "https://storage.googleapis.com/word2vec-tutorial-models/GoogleNews-vectors-negative300.bin.gz"
+curl -L -o data/word2vec/GoogleNews-vectors-negative300.bin \
+  "https://huggingface.co/NathaNn1111/word2vec-google-news-negative-300-bin/resolve/main/GoogleNews-vectors-negative300.bin"
 ```
 
-Then the system can use it from `data/word2vec/`. **This model is NOT downloaded automatically.**
+Any `.bin` or `.bin.gz` file in `data/word2vec/` is picked up automatically, so
+a gzipped copy needs no renaming (gensim reads gzip transparently).
+
+**This model is NOT downloaded automatically.** Loading it is memory-intensive;
+if the machine cannot spare several GB, use the Sentence Transformers backend
+instead, which needs only a few hundred MB.
 
 ## Running the Application
 
@@ -526,10 +533,10 @@ python -m nltk.downloader wordnet omw-1.4 punkt_tab averaged_perceptron_tagger_e
 
 ### Word2Vec model not available
 
-- Word2Vec requires manual download (~3.6GB)
-- Download from: https://storage.googleapis.com/word2vec-tutorial-models/GoogleNews-vectors-negative300.bin.gz
-- Place in `data/word2vec/GoogleNews-vectors-negative300.bin.gz`
-- Or use Sentence Transformers backend instead
+- Word2Vec requires a manual download (~3.6 GB uncompressed)
+- Download from: https://huggingface.co/NathaNn1111/word2vec-google-news-negative-300-bin
+- Place the file in `data/word2vec/` as any `.bin` or `.bin.gz`
+- Or use the Sentence Transformers backend instead
 
 ### Target word not found in sentence
 

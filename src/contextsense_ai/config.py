@@ -36,9 +36,12 @@ class Settings:
     default_word2vec_model: str = os.environ.get(
         "DEFAULT_WORD2VEC_MODEL", "GoogleNews-vectors-negative300.bin.gz"
     )
+    # The original storage.googleapis.com/word2vec-tutorial-models bucket now
+    # returns 404, so this points at a mirror of the same pre-trained vectors.
+    # The file is ~1.5 GB compressed and is NOT downloaded automatically.
     word2vec_model_url: str = (
-        "https://storage.googleapis.com/word2vec-tutorial-models/"
-        "GoogleNews-vectors-negative300.bin.gz"
+        "https://huggingface.co/NathaNn1111/word2vec-google-news-negative-300-bin/"
+        "resolve/main/GoogleNews-vectors-negative300.bin"
     )
 
     # Context extraction defaults

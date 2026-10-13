@@ -59,15 +59,18 @@ class Word2VecBackend(EmbeddingBackend):
             self._loaded = True
             return
 
-        model_file = settings.data_dir / "word2vec" / settings.default_word2vec_model
+        model_file = self._resolve_model_file()
 
-        if not model_file.exists():
-            model_file.parent.mkdir(parents=True, exist_ok=True)
+        if model_file is None:
+            model_dir = self.model_dir()
+            model_dir.mkdir(parents=True, exist_ok=True)
             raise EmbeddingError(
-                f"Word2Vec model not found at {model_file}. "
+                f"Word2Vec model not found in {model_dir}. "
                 "Download it manually from:\n"
                 f"{settings.word2vec_model_url}\n"
-                "Then place it in the data/word2vec/ directory. "
+                f"Then place it there as either the configured name "
+                f"({settings.default_word2vec_model}) or any .bin/.bin.gz file. "
+                "Gensim reads gzip transparently. "
                 "Alternatively, use the Sentence Transformers backend "
                 "which downloads its model automatically."
             )
@@ -89,6 +92,33 @@ class Word2VecBackend(EmbeddingBackend):
         except Exception as exc:
             _word2vec_available = False
             raise EmbeddingError(f"Failed to load Word2Vec model: {exc}") from exc
+
+    def model_dir(self) -> Path:
+        """Directory searched for the pre-trained model file."""
+        return settings.data_dir / "word2vec"
+
+    def _resolve_model_file(self) -> Path | None:
+        """Locate the model file, accepting compressed or uncompressed names.
+
+        The configured default is a ``.bin.gz`` name, but mirrors commonly
+        publish the uncompressed ``.bin``. Rather than requiring the user to
+        rename a 1.5 GB download, any recognised file in the model directory is
+        accepted, preferring an exact match on the configured name.
+
+        Returns None when no candidate file exists.
+        """
+        directory = self.model_dir()
+        configured = directory / settings.default_word2vec_model
+
+        if configured.exists():
+            return configured
+        if not directory.is_dir():
+            return None
+
+        candidates = sorted(
+            p for p in directory.iterdir() if p.suffix in {".bin", ".gz"} and p.is_file()
+        )
+        return candidates[0] if candidates else None
 
     def release(self) -> None:
         """Release the loaded model."""
