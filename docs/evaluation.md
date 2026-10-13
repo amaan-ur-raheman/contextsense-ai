@@ -2,24 +2,38 @@
 
 ## Dataset Acquisition
 
-### SemCor (Recommended for Real Evaluation)
+### SemCor (recommended)
 
-SemCor is the largest manually word sense annotated corpus, part of the
-WordNet project. It contains ~352,000 words annotated with WordNet senses.
+SemCor is the standard manually annotated word sense disambiguation corpus: every
+token in a Brown-corpus sentence carries a WordNet 3.0 sense assignment. It is
+part of the WordNet project and is distributed under the WordNet License.
 
 **Source:** [WordNet Download Page](https://wordnet.princeton.edu/wordnet/download/current-version/)
 
-**License:** WordNet License (free for research and commercial use with attribution)
+**Acquisition:**
 
-**Format:** SemCor is distributed as XML files with annotated sentences.
+```bash
+uv run python -m contextsense_ai.datasets.semcor --output data/datasets/semcor_brown.csv
+```
 
-**Download process:**
-1. Download the WordNet package which includes SemCor
-2. Extract to `data/raw/semcor/`
-3. Parse XML to extract (sentence, target_word, synset_id) tuples
+This downloads the Princeton WordNet 3.0 database and the SemCor CSVs (~70 MB),
+caches them under `data/raw/`, and writes roughly 130,000 evaluation examples
+across about 15,000 lemmas. Nothing large is committed to the repository.
 
-**Note:** SemCor requires manual download as it's distributed with WordNet.
-The automatic download script does not fetch SemCor.
+**Sense label translation.** SemCor identifies a sense by a WordNet sense key
+whose `wn_sense` field is a *global* synset number, not the per-lemma index used
+in names like `bank.n.02`. `artist` has exactly one sense, globally numbered 18,
+so using that number directly produces `artist.n.18`, which does not exist. The
+converter resolves `(pos, lemma, wn_sense)` to a synset offset through the
+official `index.sense`, then converts the offset into per-lemma numbering using
+NLTK's canonical ordering. Verify generated labels against WordNet if you modify
+this step; a plausible-looking mistake here silently mislabels the corpus.
+
+**Filtering.** Rows whose gold sense is absent from WordNet for that lemma (a few
+plural lemmas such as "eggs") are dropped, as are rows whose target lemma is not
+a standalone token in the sentence. The latter matters because the engine locates
+targets by token match: keeping those rows means one model variant silently loses
+examples the others score, and the comparison stops being like-for-like.
 
 ### Alternative Datasets
 
@@ -178,19 +192,18 @@ Evaluation results include:
 1. **Sample dataset is not a benchmark**: The built-in 8 examples are for
    demonstration only. Do not report results from them as benchmark performance.
 
-2. **SemCor licensing**: SemCor requires manual download and has specific
-   terms of use. Automatic acquisition may not be possible.
+2. **Sense inventory alignment**: Results depend on exact synset ID matching.
+   Different datasets may use different sense inventories. SemCor is annotated
+   against WordNet 3.0, which is the inventory NLTK ships, so sense IDs line up.
 
-3. **Sense inventory alignment**: Results depend on exact synset ID matching.
-   Different datasets may use different sense inventories.
+3. **Coverage differences**: If models skip different examples, comparing
+   raw metrics alone can be misleading. Always check coverage. Datasets are
+   filtered so every variant can predict every row, but a custom CSV may not be.
 
-4. **Coverage differences**: If models skip different examples, comparing
-   raw metrics alone can be misleading. Always check coverage.
-
-5. **Small datasets**: With few examples per sense, per-class metrics
+4. **Small datasets**: With few examples per sense, per-class metrics
    may be unstable.
 
-6. **Context window effects**: Local window context may miss relevant
+5. **Context window effects**: Local window context may miss relevant
    words outside the window. Full-sentence context may include noise.
 
 ## Running Evaluation
