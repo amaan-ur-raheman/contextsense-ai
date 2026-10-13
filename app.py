@@ -38,6 +38,13 @@ if "comparison_results" not in st.session_state:
     st.session_state.comparison_results = None
 if "evaluation_results" not in st.session_state:
     st.session_state.evaluation_results = None
+# Defaults for the Playground form. The widgets own these keys, so they cannot
+# also pass `value`; seeding here gives sensible first-load content and lets the
+# example buttons overwrite them.
+if "sentence_input" not in st.session_state:
+    st.session_state.sentence_input = "I deposited money in the bank."
+if "target_input" not in st.session_state:
+    st.session_state.target_input = "bank"
 
 st.set_page_config(
     page_title="ContextSense AI",
@@ -219,16 +226,19 @@ if pages[page] == "playground":
 
         col1, col2 = st.columns([2, 1])
         with col1:
+            # Seeded from session state so the example buttons can drive the
+            # form. Streamlit pins a widget once it owns `key`, so these must
+            # not also pass `value`.
             sentence = st.text_area(
                 "Sentence",
-                value="I deposited money in the bank.",
+                key="sentence_input",
                 height=100,
                 help="Enter a sentence containing the ambiguous word.",
             )
         with col2:
             target_word = st.text_input(
                 "Target word",
-                value="bank",
+                key="target_input",
                 help="The ambiguous word to disambiguate.",
             )
 
@@ -273,7 +283,8 @@ if pages[page] == "playground":
                 "WSD Method",
                 options=list(ModelVariant),
                 format_func=lambda v: v.display_name,
-                index=ModelVariant.SENTENCE_TRANSFORMER_WORDNET.value,
+                # Streamlit wants the positional index, not the option value.
+                index=list(ModelVariant).index(ModelVariant.SENTENCE_TRANSFORMER_WORDNET),
             )
 
             if model_variant.requires_embedding:
@@ -322,7 +333,10 @@ if pages[page] == "playground":
                     help="Number of tokens on each side of the target word.",
                 )
             else:
-                window = 0
+                # The window is unused for full-sentence context, but it must
+                # still be valid: ContextExtractor rejects anything below the
+                # configured minimum, and 0 made every submission fail.
+                window = settings.default_context_window
 
             st.divider()
             st.subheader("Preprocessing")
@@ -411,6 +425,70 @@ if pages[page] == "playground":
                     st.error(f"Error: {exc}")
                 except Exception as exc:
                     st.error(f"Unexpected error: {exc}")
+
+    # Render the stored prediction. This reads session state rather than the
+    # local `result`, so the result stays on screen across reruns (for example
+    # after switching pages or changing a sidebar control).
+    prediction = st.session_state.get("prediction")
+    if prediction is not None:
+        st.divider()
+        st.subheader("🔎 Result")
+
+        if not prediction.success:
+            st.warning(f"Could not disambiguate: {prediction.error_message or 'unknown error'}")
+        else:
+            top = prediction.ranked_candidates[0] if prediction.ranked_candidates else None
+
+            head1, head2, head3 = st.columns(3)
+            with head1:
+                st.metric("Predicted sense", prediction.predicted_synset_id)
+            with head2:
+                score = prediction.top_similarity_score
+                st.metric("Similarity", "n/a" if score is None else f"{score:.4f}")
+            with head3:
+                st.metric("Candidates considered", len(prediction.candidates))
+
+            if top is not None:
+                st.markdown(
+                    f"**{prediction.predicted_synset_id}** — {top.definition}",
+                    help="Similarity scores are not probabilities.",
+                )
+
+            with st.expander("Context used", expanded=False):
+                if prediction.context:
+                    st.code(" ".join(prediction.context), language=None)
+                else:
+                    st.info(
+                        "No context tokens. The selected method is a context-free "
+                        "baseline, which ignores the sentence."
+                    )
+
+            with st.expander("Ranked candidates", expanded=False):
+                st.dataframe(
+                    [
+                        {
+                            "rank": c.rank,
+                            "synset": c.synset_id,
+                            "pos": c.pos,
+                            "score": round(c.similarity_score, 4),
+                            "definition": c.definition,
+                        }
+                        for c in prediction.ranked_candidates
+                    ],
+                    width="stretch",
+                    hide_index=True,
+                )
+
+            with st.expander("How this was decided", expanded=False):
+                from contextsense_ai.explanation import generate_explanation
+
+                for title, body in generate_explanation(prediction):
+                    st.markdown(f"**{title}** — {body}")
+
+            if prediction.warnings:
+                with st.expander("Notes", expanded=False):
+                    for warning in prediction.warnings:
+                        st.markdown(f"- {warning}")
 
 elif pages[page] == "comparison":
     st.title("📊 Model Comparison")
