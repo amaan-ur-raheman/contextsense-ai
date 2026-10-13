@@ -1,0 +1,69 @@
+{
+  "description": "Sample demonstration examples for ContextSense AI. These are NOT benchmark examples. Gold labels were verified against WordNet 3.0 definitions.",
+  "examples": [
+    {
+      "sentence": "I deposited money in the bank.",
+      "target_word": "bank",
+      "target_occurrence": 0,
+      "gold_synset": "bank.n.02",
+      "pos": "n",
+      "note": "Financial institution"
+    },
+    {
+      "sentence": "The fisherman sat near the bank of the river.",
+      "target_word": "bank",
+      "target_occurrence": 0,
+      "gold_synset": "bank.n.01",
+      "pos": "n",
+      "note": "Land beside a river"
+    },
+    {
+      "sentence": "The baseball player hit the ball with a bat.",
+      "target_word": "bat",
+      "target_occurrence": 0,
+      "gold_synset": "bat.n.05",
+      "pos": "n",
+      "note": "Sports equipment"
+    },
+    {
+      "sentence": "A bat flew out of the cave.",
+      "target_word": "bat",
+      "target_occurrence": 0,
+      "gold_synset": "bat.n.01",
+      "pos": "n",
+      "note": "Flying mammal"
+    },
+    {
+      "sentence": "I moved the cursor using the mouse.",
+      "target_word": "mouse",
+      "target_occurrence": 0,
+      "gold_synset": "mouse.n.04",
+      "pos": "n",
+      "note": "Computer pointing device"
+    },
+    {
+      "sentence": "The mouse ran across the kitchen floor.",
+      "target_word": "mouse",
+      "target_occurrence": 0,
+      "gold_synset": "mouse.n.01",
+      "pos": "n",
+      "note": "Small animal"
+    },
+    {
+      "sentence": "Spring brings new life to the garden.",
+      "target_word": "spring",
+      "target_occurrence": 0,
+      "gold_synset": "spring.n.01",
+      "pos": "n",
+      "note": "Season"
+    },
+    {
+      "sentence": "The spring in the mattress broke.",
+      "target_word": "spring",
+      "target_occurrence": 0,
+      "gold_synset": "spring.n.02",
+      "pos": "n",
+      "note": "Mechanical coil"
+    }
+  ]
+}
