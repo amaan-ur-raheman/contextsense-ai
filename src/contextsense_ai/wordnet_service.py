@@ -88,6 +88,18 @@ class WordNetService:
             self._sense_index_cache[cache_key] = index
         return index.get(syn.offset()) or str(syn.name())
 
+    def all_synsets_for(self, word: str) -> dict[str, list[Synset]]:
+        """Return every synset for a lemma, grouped by POS, in WordNet order.
+
+        This is the canonical sense ordering the per-lemma sense numbers are
+        derived from, so it is the right source when a caller holds a synset
+        offset rather than a sense ID.
+        """
+        grouped: dict[str, list[Synset]] = {}
+        for syn in wn.synsets(word.strip().lower()):
+            grouped.setdefault(syn.pos(), []).append(syn)
+        return grouped
+
     def get_synset_from_id(self, synset_id: str) -> Synset | None:
         """Get a Synset object from its ID string.
 

@@ -1,68 +1,78 @@
-# Data Directory
+# Evaluation Datasets
 
-This directory contains datasets and downloaded resources for ContextSense AI.
+## What is here
 
-## Structure
+The bundled `sample_examples.json` contains **8 hand-written examples**. It exists
+to demonstrate the interface. It is far too small to measure anything: a single
+example is worth 12.5 accuracy points, and the words involved were chosen because
+they are famously ambiguous.
 
-```
-data/
-├── README.md              # This file
-├── sample_examples.json   # Built-in demonstration examples
-├── raw/                   # Raw downloaded datasets (not committed)
-├── processed/            # Processed datasets (not committed)
-└── word2vec/             # Word2Vec model files (not committed)
-```
+Real numbers come from **SemCor**, fetched on demand.
 
-## Demonstration Data
+## SemCor (recommended)
 
-### sample_examples.json
+SemCor is the standard manually annotated word sense disambiguation corpus: every
+token in a Brown-corpus sentence carries a WordNet 3.0 sense assignment.
 
-A small dataset with 8 examples for ambiguous words (bank, bat, mouse, spring).
-**This is for demonstration only and is not a benchmark.**
-
-Schema:
-```json
-{
-  "sentence": "I deposited money in the bank.",
-  "target_word": "bank",
-  "target_occurrence": 0,
-  "gold_synset": "bank.n.01",
-  "pos": "n"
-}
-```
-
-## Adding Real Datasets
-
-For proper evaluation, add a real WSD dataset like SemCor to `data/raw/`.
-
-### CSV Format
-
-User-uploaded CSV files should have these columns:
-- `sentence` (required): The text containing the target word
-- `target_word` (required): The ambiguous word
-- `gold_synset` (required): The WordNet synset ID (e.g., "bank.n.01")
-- `target_occurrence` (optional): Which occurrence (0-indexed)
-- `pos` (optional): Part of speech
-
-### SemCor
-
-SemCor is the largest manually word sense annotated corpus.
-It is available from the [WordNet download page](https://wordnet.princeton.edu/wordnet/download/current-version/).
-
-Place SemCor files in `data/raw/semcor/` after downloading.
-
-## Word2Vec Model
-
-Download the Google News Word2Vec model manually:
 ```bash
-mkdir -p data/word2vec
-curl -o data/word2vec/GoogleNews-vectors-negative300.bin.gz \
-  "https://storage.googleapis.com/word2vec-tutorial-models/GoogleNews-vectors-negative300.bin.gz"
+uv run python -m contextsense_ai.datasets.semcor --output data/datasets/semcor_brown.csv
 ```
 
-This model is ~3.6GB compressed and requires significant RAM to load.
+This downloads roughly 70 MB (Princeton WordNet 3.0 plus the SemCor CSVs),
+converts them, and writes the result. Downloads are cached under `data/raw/`, so
+subsequent runs are fast. Nothing large is committed to the repository.
 
-## License
+Output columns match the CSV loader:
 
-Check individual dataset licenses. WordNet data is licensed under
-the WordNet License. SemCor has specific terms of use.
+| Column | Meaning |
+| --- | --- |
+| `sentence` | The full sentence |
+| `target_word` | The disambiguated lemma (not the inflected surface form) |
+| `gold_synset` | Gold sense as `lemma.pos.NN` |
+| `target_occurrence` | Which occurrence of the lemma to disambiguate (0-based) |
+| `pos` | Part of speech |
+
+Then evaluate:
+
+```bash
+uv run run-evaluation --csv data/datasets/semcor_brown.csv --model all
+```
+
+### Why conversion is non-trivial
+
+SemCor identifies a sense by a WordNet **sense key**, and its `wn_sense` field is
+a *global* synset number, not the per-lemma index used in names like `bank.n.02`.
+`artist` has exactly one sense, globally numbered 18 — so naively using that
+number produces `artist.n.18`, which does not exist.
+
+The converter instead resolves `(pos, lemma, wn_sense)` to a synset offset via the
+official WordNet 3.0 `index.sense`, then translates the offset into per-lemma
+numbering using NLTK's own canonical ordering. Getting this wrong silently
+mislabels the corpus, so it is worth checking that generated labels resolve
+against WordNet.
+
+### Filtering
+
+Two kinds of row are dropped:
+
+- rows whose gold sense does not exist in WordNet for that lemma (a few plural
+  lemmas such as "eggs" and "woods"), which no prediction could ever match;
+- rows whose target lemma is not a standalone token in the reconstructed
+  sentence, because the engine locates targets by token match and would fail on
+  them at prediction time.
+
+The second matters more than it looks: without it, one model variant silently
+loses rows the others score, and the comparison stops being like-for-like.
+
+## Other datasets
+
+Any CSV with `sentence`, `target_word`, and `gold_synset` columns works:
+
+```bash
+uv run run-evaluation --csv path/to/dataset.csv --model all
+```
+
+Optional columns: `target_occurrence`, `pos`, `id`. Gold labels are validated
+against WordNet on load, and invalid rows are reported rather than scored.
+
+See `docs/evaluation.md` for methodology and metric definitions.

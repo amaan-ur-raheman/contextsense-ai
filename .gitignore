@@ -53,3 +53,10 @@ artifacts/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Downloaded benchmark corpora and large derived datasets (see
+# `uv run python -m contextsense_ai.datasets.semcor` to regenerate)
+data/raw/*
+!data/raw/.gitkeep
+data/datasets/*
+!data/datasets/.gitkeep
