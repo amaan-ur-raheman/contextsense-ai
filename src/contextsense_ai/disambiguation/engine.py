@@ -21,6 +21,9 @@ from contextsense_ai.schemas import (
 )
 from contextsense_ai.wordnet_service import WordNetService
 
+# Sense descriptions are constant text, so their vectors are cached per model.
+_SENSE_VECTOR_CACHE: dict[tuple[str, str], np.ndarray] = {}
+
 
 def build_sense_description(candidate: CandidateSense) -> str:
     """Build a textual description of a candidate sense for embedding."""
@@ -60,14 +63,33 @@ def _encode_sense(
     backend: EmbeddingBackend,
     candidate: CandidateSense,
 ) -> np.ndarray:
-    """Encode a candidate sense description into a vector."""
+    """Encode a candidate sense description into a vector, memoised per model.
+
+    A sense description is fixed text, so its vector never changes for a given
+    embedding model. Without caching, every example re-encodes every candidate
+    sense: at roughly 65 ms per call and ~24 candidate senses per word, that is
+    over a second of redundant work per example, which dominates any evaluation
+    over a real corpus.
+    """
+    cache_key = (_backend_name(backend) or "backend", candidate.synset_offset)
+    cached = _SENSE_VECTOR_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     description = build_sense_description(candidate)
     result = backend.encode_text(description)
     if not result.is_valid or result.is_zero_vector:
         raise EmbeddingError(
             f"Sense encoding failed for {candidate.synset_id}: {result.error_message}"
         )
+
+    _SENSE_VECTOR_CACHE[cache_key] = result.vector
     return result.vector
+
+
+def clear_sense_vector_cache() -> None:
+    """Drop cached sense vectors, for instance after switching embedding models."""
+    _SENSE_VECTOR_CACHE.clear()
 
 
 def _backend_name(embedding_backend: EmbeddingBackend | None) -> str | None:

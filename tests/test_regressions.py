@@ -353,6 +353,98 @@ def test_candidate_sense_roundtrips_frequency_fields() -> None:
     assert ranked.frequency_count == candidate.frequency_count
 
 
+def test_sense_vectors_are_cached_across_examples() -> None:
+    """Sense descriptions are fixed text, so they must be encoded only once.
+
+    Re-encoding every candidate sense for every example costs roughly 65 ms per
+    call and dominates any evaluation over a real corpus.
+    """
+    from contextsense_ai.disambiguation.engine import clear_sense_vector_cache
+
+    calls: list[str] = []
+
+    class CountingBackend(StubBackend):
+        def encode_text(self, text: str) -> EmbeddingResult:
+            calls.append(text)
+            return super().encode_text(text)
+
+    backend = CountingBackend()
+    clear_sense_vector_cache()
+
+    sentences = [
+        ("I deposited money in the bank.", "bank"),
+        ("The fisherman sat near the bank of the river.", "bank"),
+        ("A bat flew out of the cave.", "bat"),
+    ]
+    for text, word in sentences:
+        disambiguate(
+            sentence=text,
+            target_word=word,
+            occurrence_index=0,
+            model_variant=ModelVariant.SENTENCE_TRANSFORMER_WORDNET,
+            embedding_backend=backend,
+            pos="n",
+        )
+
+    # Caching must bound the encodes well below one-per-candidate-per-example.
+    assert len(calls) < 24 * len(sentences), "sense descriptions appear to be re-encoded"
+
+    # A second pass over the same inputs must issue no new sense encodes: only
+    # the per-example context is new.
+    before = len(calls)
+    for text, word in sentences:
+        disambiguate(
+            sentence=text,
+            target_word=word,
+            occurrence_index=0,
+            model_variant=ModelVariant.SENTENCE_TRANSFORMER_WORDNET,
+            embedding_backend=backend,
+            pos="n",
+        )
+    assert len(calls) == before + len(sentences), "cached senses were not reused"
+
+    clear_sense_vector_cache()
+
+
+def test_sense_cache_is_keyed_by_model() -> None:
+    """Vectors from one embedding model must never leak into another."""
+    from contextsense_ai.disambiguation.engine import clear_sense_vector_cache
+
+    clear_sense_vector_cache()
+
+    class OtherBackend(StubBackend):
+        def encode_text(self, text: str) -> EmbeddingResult:
+            seed = abs(hash(("other", text))) % (2**32)
+            vector = np.random.default_rng(seed).normal(size=self.dimensions)
+            return EmbeddingResult(vector=vector, model_name="other", is_valid=True)
+
+        @property
+        def model_info(self) -> EmbeddingModelInfo:
+            info = super().model_info
+            return EmbeddingModelInfo(
+                name="other-model",
+                backend="stub",
+                dimensions=info.dimensions or self.dimensions,
+                is_available=True,
+            )
+
+    results = []
+    for backend in (StubBackend(), OtherBackend()):
+        clear_sense_vector_cache()
+        result = disambiguate(
+            sentence="I deposited money in the bank.",
+            target_word="bank",
+            occurrence_index=0,
+            model_variant=ModelVariant.SENTENCE_TRANSFORMER_WORDNET,
+            embedding_backend=backend,
+            pos="n",
+        )
+        results.append(result)
+
+    assert all(r.success for r in results)
+    clear_sense_vector_cache()
+
+
 def test_every_candidate_contains_the_target_as_a_lemma() -> None:
     """wn.synsets only returns synsets containing the word, so IDs stay well formed."""
     service = WordNetService()

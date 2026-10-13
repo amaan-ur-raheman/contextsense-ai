@@ -187,6 +187,43 @@ Evaluation results include:
 - `*.predictions.csv`: Per-example predictions with gold and predicted synsets
 - `*.summary.json`: Aggregate metrics and configuration
 
+## Measured Results
+
+Measured on a 5,000-example random sample of the converted SemCor corpus
+(local-window context, window 5, `all-MiniLM-L6-v2`). All variants scored the
+same rows.
+
+| Model | Accuracy | F1 (weighted) | Scored |
+| --- | --- | --- | --- |
+| WordNet first-sense | 0.3145 | 0.3067 | 4996 |
+| Most-frequent-sense | 0.3307 | 0.3230 | 4996 |
+| Sentence Transformers + WordNet | 0.3219 | **0.3483** | 4995 |
+
+Reproduce with:
+
+```bash
+uv run python -m contextsense_ai.datasets.semcor --output data/datasets/semcor_brown.csv
+uv run run-evaluation --csv data/datasets/semcor_brown.csv --model all
+```
+
+### Reading these numbers honestly
+
+SemCor is an **all-words** corpus: every content word is annotated, including
+function words and rare terms, rather than a curated set of deliberately
+ambiguous words. Absolute scores are correspondingly low, and roughly 30% is the
+level a strong contextual system typically reaches here. The gap to the 0.875
+seen on the bundled 8-example sample is entirely explained by that difference in
+difficulty, not by any change in the system.
+
+The embedding method leads on weighted F1 but not on accuracy. Macro-averaged
+scores are low across the board because the corpus contains thousands of
+hapax legomena: a sense annotated once contributes a full 0 or 1 to the macro
+average.
+
+Coverage is equal across variants to within one row, so these numbers are
+comparable. Check `examples_evaluated` in the exported summary before comparing
+any two runs; differing coverage silently invalidates the comparison.
+
 ## Limitations of Results
 
 1. **Sample dataset is not a benchmark**: The built-in 8 examples are for
