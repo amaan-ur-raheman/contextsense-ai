@@ -61,6 +61,8 @@ data/raw/*
 data/datasets/*
 !data/datasets/.gitkeep
 
+presentation-guide.md
+
 # Local teaching workspace. Personal study material, not part of the
 # library: open lessons/index.html in a browser to use it. Nothing here
 # is needed to run, test, or evaluate the project.
