@@ -1,0 +1,15 @@
+# Server configuration.
+#
+# fileWatcherType = "none" disables Streamlit's local source watcher. At
+# startup the watcher walks sys.modules probing each entry with hasattr(m,
+# "__path__"). transformers/__init__.py implements a lazy __getattr__ that
+# imports a module on attribute access, so those harmless probes import every
+# vision model in transformers -- each of which does `from torchvision...`,
+# and torchvision is not a dependency here. The resulting ModuleNotFoundError
+# tracebacks are noise: the app runs, and only text encoders are used.
+#
+# Disabling the watcher removes the module walk, so the probes never happen.
+# The cost is no hot-reload: editing app.py requires restarting the app.
+
+[server]
+fileWatcherType = "none"
