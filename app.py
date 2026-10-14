@@ -42,7 +42,7 @@ if "evaluation_results" not in st.session_state:
 # also pass `value`; seeding here gives sensible first-load content and lets the
 # example buttons overwrite them.
 if "sentence_input" not in st.session_state:
-    st.session_state.sentence_input = "I deposited money in the bank."
+    st.session_state.sentence_input = "She deposited the cheque at the bank."
 if "target_input" not in st.session_state:
     st.session_state.target_input = "bank"
 
@@ -365,7 +365,13 @@ if pages[page] == "playground":
     st.subheader("📝 Try an example")
     example_cols = st.columns(4)
     examples = [
-        ("Bank: financial", "I deposited money in the bank.", "bank"),
+        # "She deposited the cheque at the bank" resolves to bank.n.02, matching
+        # the label. The previously shipped "I deposited money in the bank"
+        # returned bank.n.08 (a container for money at home) and so failed the
+        # demo it was labelled with. The dataset in data/sample_examples.json
+        # keeps the harder sentence: its gold label is verified, so the failure
+        # there is real model error and must stay visible.
+        ("Bank: financial", "She deposited the cheque at the bank.", "bank"),
         ("Bank: river", "The fisherman sat near the bank of the river.", "bank"),
         ("Bat: sports", "The baseball player hit the ball with a bat.", "bat"),
         ("Bat: animal", "A bat flew out of the cave.", "bat"),
@@ -374,12 +380,24 @@ if pages[page] == "playground":
         ("Spring: season", "Spring brings new life to the garden.", "spring"),
         ("Spring: mechanical", "The spring in the mattress broke.", "spring"),
     ]
+    # Set the inputs from a callback rather than inline. Session state for a
+    # widget key cannot be assigned after that widget has been instantiated,
+    # and the inputs are rendered above these buttons. on_click runs before
+    # widgets are built, so the assignment is legal and no st.rerun() is needed
+    # -- the rerun that follows a click already re-executes the script.
+    def _load_example(sentence: str, word: str) -> None:
+        st.session_state.sentence_input = sentence
+        st.session_state.target_input = word
+        st.session_state.prediction = None
+
     for i, (label, sent, word) in enumerate(examples):
         with example_cols[i % 4]:
-            if st.button(label, key=f"ex_{i}"):
-                st.session_state.sentence_input = sent
-                st.session_state.target_input = word
-                st.rerun()
+            st.button(
+                label,
+                key=f"ex_{i}",
+                on_click=_load_example,
+                args=(sent, word),
+            )
 
     # Process prediction
     if submitted:
