@@ -134,7 +134,9 @@ def run_model_comparison(
 
     per_model_results: dict[ModelVariant, EvaluationMetrics] = {}
     # Keyed by example id so results survive export and duplicate sentences.
+    # Holds the last variant evaluated; ``predictions_by_variant`` keeps them all.
     all_predictions: dict[str, PredictionResult] = {}
+    predictions_by_variant: dict[str, dict[str, PredictionResult]] = {}
     skipped_variants: list[str] = []
 
     for variant in model_variants:
@@ -153,8 +155,11 @@ def run_model_comparison(
         )
         per_model_results[variant] = metrics
 
+        variant_predictions: dict[str, PredictionResult] = {}
         for example, pred in zip((e for e in examples if e.is_valid), prediction_list, strict=True):
             all_predictions[example.id] = pred
+            variant_predictions[example.id] = pred
+        predictions_by_variant[variant.value] = variant_predictions
 
     if not per_model_results:
         raise EvaluationError(
@@ -189,6 +194,7 @@ def run_model_comparison(
         },
         timestamp=datetime.now(UTC).isoformat(),
         predictions=all_predictions,
+        predictions_by_variant=predictions_by_variant,
     )
 
     if output_path:
@@ -233,32 +239,38 @@ def save_results(result: EvaluationResult, output_path: Path | str) -> None:
 def _save_predictions_csv(result: EvaluationResult, path: Path) -> None:
     """Save per-example predictions to CSV.
 
-    For a multi-variant comparison the per-example rows come from the variant
-    that produced them; ``model_variant`` records which one that was.
+    One row per (example, model variant). ``predictions`` alone cannot express
+    this: it is keyed by example id, so in a multi-variant comparison each
+    variant overwrote the previous one and only the last survived.
     """
+    by_variant = result.predictions_by_variant or {
+        result_variant: result.predictions for result_variant in ("",)
+    }
+
     rows: list[dict[str, object]] = []
-    for example in result.examples:
-        pred = result.predictions.get(example.id)
-        if pred is None:
-            continue
-        rows.append(
-            {
-                "example_id": example.id,
-                "sentence": example.sentence,
-                "target_word": example.target_word,
-                "target_occurrence": example.target_occurrence,
-                "gold_synset": example.gold_synset,
-                "predicted_synset": pred.predicted_synset_id,
-                "predicted_definition": pred.predicted_definition,
-                "top_similarity_score": pred.top_similarity_score,
-                "success": pred.success,
-                "model_variant": pred.model_variant.value,
-                "error_message": pred.error_message,
-            }
-        )
+    for variant_name, predictions in by_variant.items():
+        for example in result.examples:
+            pred = predictions.get(example.id)
+            if pred is None:
+                continue
+            rows.append(
+                {
+                    "example_id": example.id,
+                    "model_variant": variant_name or pred.model_variant.value,
+                    "sentence": example.sentence,
+                    "target_word": example.target_word,
+                    "target_occurrence": example.target_occurrence,
+                    "gold_synset": example.gold_synset,
+                    "predicted_synset": pred.predicted_synset_id,
+                    "predicted_definition": pred.predicted_definition,
+                    "top_similarity_score": pred.top_similarity_score,
+                    "success": pred.success,
+                    "error_message": pred.error_message,
+                }
+            )
 
     pd.DataFrame(rows).to_csv(path, index=False)
-    print(f"Saved {len(rows)} prediction(s) to {path}")
+    print(f"Saved {len(rows)} prediction(s) across {len(by_variant)} variant(s) to {path}")
 
 
 def _save_summary_json(result: EvaluationResult, path: Path) -> None:

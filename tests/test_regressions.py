@@ -192,6 +192,32 @@ def test_comparison_export_writes_one_row_per_example(tmp_path) -> None:  # type
     assert len(frame) == len([e for e in examples if e.is_valid])
 
 
+def test_comparison_export_keeps_every_model_variant(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A comparison must export every variant, not only the last one evaluated.
+
+    ``EvaluationResult.predictions`` is keyed by example id, so writing each
+    variant into the same mapping left only the final variant in the CSV while
+    the summary JSON reported all three. The CSV looked complete and was not.
+    """
+    import pandas as pd
+
+    variants = [
+        ModelVariant.FIRST_SENSE,
+        ModelVariant.MOST_FREQUENT_SENSE,
+        ModelVariant.SENTENCE_TRANSFORMER_WORDNET,
+    ]
+    result = run_model_comparison(
+        load_sample_dataset(),
+        StubBackend(),
+        model_variants=variants,
+    )
+    save_results(result, tmp_path / "out")
+
+    frame = pd.read_csv(tmp_path / "out.predictions.csv")
+    assert set(frame["model_variant"]) == {v.value for v in variants}
+    assert len(frame) == result.shared_subset_evaluated * len(variants)
+
+
 def test_most_frequent_sense_differs_from_first_sense() -> None:
     """The MFS baseline must be a genuinely different algorithm.
 
