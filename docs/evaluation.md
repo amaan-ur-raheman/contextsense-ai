@@ -189,15 +189,17 @@ Evaluation results include:
 
 ## Measured Results
 
-Measured on a 5,000-example random sample of the converted SemCor corpus
+Measured on a 3,000-example random sample of the converted SemCor corpus
 (local-window context, window 5, `all-MiniLM-L6-v2`). All variants scored the
-same rows.
+same rows. These are the numbers in the committed
+`artifacts/benchmark_3k.summary.json`; an earlier 5,000-example run was not
+retained, so it is not reported here.
 
-| Model | Accuracy | F1 (weighted) | Scored |
-| --- | --- | --- | --- |
-| WordNet first-sense | 0.3145 | 0.3067 | 4996 |
-| Most-frequent-sense | 0.3307 | 0.3230 | 4996 |
-| Sentence Transformers + WordNet | 0.3219 | **0.3483** | 4995 |
+| Model | Accuracy | F1 (weighted) | F1 (macro) | Scored |
+| --- | --- | --- | --- | --- |
+| WordNet first-sense | 0.3097 | 0.3038 | 0.2357 | 3000 |
+| Most-frequent-sense | **0.3280** | 0.3235 | **0.2470** | 3000 |
+| Sentence Transformers + WordNet | **0.3317** | **0.3521** | 0.2132 | 3000 |
 
 Reproduce with:
 
@@ -215,10 +217,14 @@ level a strong contextual system typically reaches here. The gap to the 0.875
 seen on the bundled 8-example sample is entirely explained by that difference in
 difficulty, not by any change in the system.
 
-The embedding method leads on weighted F1 but not on accuracy. Macro-averaged
-scores are low across the board because the corpus contains thousands of
-hapax legomena: a sense annotated once contributes a full 0 or 1 to the macro
-average.
+The embedding method leads by 0.4 accuracy points over the frequency baseline,
+which is within noise on 3,000 rows, and it leads clearly on weighted F1. It
+**loses on macro F1** (0.2132 against 0.2357 and 0.2470). Macro-averaged scores
+are low across the board because the corpus contains thousands of hapax
+legomena: a sense annotated once contributes a full 0 or 1 to the macro average.
+The method concentrates probability on high-frequency senses, so it trades
+rare-sense recall for it. Any claim that this approach beats the baselines should
+carry that trade-off with it.
 
 Coverage is equal across variants to within one row, so these numbers are
 comparable. Check `examples_evaluated` in the exported summary before comparing

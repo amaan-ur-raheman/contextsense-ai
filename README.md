@@ -592,9 +592,8 @@ Key settings:
 3. **Sense description quality**: WordNet definitions may not distinguish closely related senses
 4. **Mean pooling**: Loses word order and treats all words equally
 5. **No training**: Uses pretrained models, not task-specific training
-6. **Small demo dataset**: Sample examples are not a benchmark
-7. **SemCor requires manual download**: Not automatically acquired
-8. **Similarity ≠ probability**: Scores indicate vector alignment, not prediction confidence
+6. **Small demo dataset**: The bundled 8-example sample is not a benchmark; the SemCor evaluation is the benchmark, and its conversion and evaluation code ship in this project (the corpus itself is fetched on demand)
+7. **Similarity ≠ probability**: Scores indicate vector alignment, not prediction confidence
 
 ## Future Improvements
 
@@ -602,10 +601,9 @@ Key settings:
 2. Fine-tuned transformer models for WSD
 3. Dedicated sense embeddings
 4. Ensemble of multiple methods
-5. Evaluation on SemCor or SemEval benchmarks
-6. POS tagging integration
-7. Domain-specific models
-8. multilingual WSD support
+5. Evaluation on SemEval or other WSD benchmarks
+6. Domain-specific models
+7. multilingual WSD support
 
 ## References
 
