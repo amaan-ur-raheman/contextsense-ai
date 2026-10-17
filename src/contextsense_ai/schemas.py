@@ -238,6 +238,4 @@ class EvaluationResult:
     config: dict[str, object]
     timestamp: str = ""
     predictions: dict[str, PredictionResult] = field(default_factory=dict)
-    predictions_by_variant: dict[str, dict[str, PredictionResult]] = field(
-        default_factory=dict
-    )
+    predictions_by_variant: dict[str, dict[str, PredictionResult]] = field(default_factory=dict)

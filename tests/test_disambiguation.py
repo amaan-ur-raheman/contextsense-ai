@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
 
 import numpy as np
 import pytest
 
 from contextsense_ai.disambiguation.engine import build_sense_description, disambiguate
+from contextsense_ai.embeddings.base import EmbeddingBackend, EmbeddingModelInfo, EmbeddingResult
 from contextsense_ai.schemas import (
     CandidateSense,
     ContextStrategy,
@@ -33,24 +33,18 @@ def _check_wordnet_available() -> bool:
 
 
 @dataclass
-class MockEmbeddingBackend:
+class MockEmbeddingBackend(EmbeddingBackend):
     """Mock embedding backend that returns controlled vectors."""
 
-    vectors: dict[str, np.ndarray] = None  # type: ignore
+    vectors: dict[str, np.ndarray] = field(default_factory=dict)
     model_name: str = "mock"
     dimensions: int = 3
     fail_on: list[str] | None = None
     return_zero_vector: bool = False
 
-    def __post_init__(self) -> None:
-        if self.vectors is None:
-            self.vectors = {}
-
     @property
-    def model_info(self) -> Any:
+    def model_info(self) -> EmbeddingModelInfo:
         """Return mock model info."""
-        from contextsense_ai.embeddings.base import EmbeddingModelInfo
-
         return EmbeddingModelInfo(
             name=self.model_name,
             backend="mock",
@@ -59,10 +53,8 @@ class MockEmbeddingBackend:
             description="Mock embedding backend for testing",
         )
 
-    def encode_text(self, text: str) -> Any:
+    def encode_text(self, text: str) -> EmbeddingResult:
         """Return a mock vector for the text."""
-        from contextsense_ai.embeddings.base import EmbeddingResult
-
         if self.fail_on and any(fail in text for fail in self.fail_on):
             return EmbeddingResult(
                 vector=np.zeros(self.dimensions),
@@ -91,7 +83,7 @@ class MockEmbeddingBackend:
             dimensions=self.dimensions,
         )
 
-    def encode_tokens(self, tokens: list[str]) -> Any:
+    def encode_tokens(self, tokens: list[str]) -> EmbeddingResult:
         """Encode tokens by joining and encoding."""
         return self.encode_text(" ".join(str(t) for t in tokens))
 
@@ -228,6 +220,7 @@ class TestDisambiguateEngine:
         )
 
         assert result.success is False
+        assert result.error_message is not None
         assert "No WordNet senses" in result.error_message
         assert result.ranked_candidates == []
 
@@ -241,6 +234,7 @@ class TestDisambiguateEngine:
             embedding_backend=mock_backend,
         )
         assert result.success is False
+        assert result.error_message is not None
         assert "not found" in result.error_message
 
     def test_prediction_result_structure(self, mock_backend: MockEmbeddingBackend) -> None:

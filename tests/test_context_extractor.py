@@ -101,4 +101,6 @@ class TestContextMetadata:
             "cat",
             0,
         )
-        assert "**cat**" in result["highlighted_sentence"]
+        highlighted = result["highlighted_sentence"]
+        assert isinstance(highlighted, str)
+        assert "**cat**" in highlighted

@@ -38,7 +38,7 @@ def _write_word2vec_binary(path: Path, words: list[str], dimensions: int) -> Non
 
 
 @pytest.fixture
-def model_dir(tmp_path, monkeypatch) -> Path:  # type: ignore[no-untyped-def]
+def model_dir(tmp_path: Path, monkeypatch) -> Path:  # type: ignore[no-untyped-def]
     """Point settings at a temporary model directory."""
     from contextsense_ai.config import settings
 

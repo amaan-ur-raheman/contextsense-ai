@@ -96,7 +96,7 @@ class TestComputeMetrics:
         examples = [
             self._make_example("Sent 1", "bank", "bank.n.01", "ex1"),
         ]
-        predictions = {}
+        predictions: dict[str, PredictionResult] = {}
 
         metrics = compute_metrics(examples, predictions, model_variant=ModelVariant.FIRST_SENSE)
 
