@@ -34,6 +34,13 @@ needs_wordnet_files = pytest.mark.skipif(
 
 def test_treebank_prefix_mapping() -> None:
     assert semcor._TREEBANK_PREFIX_TO_POS["N"] == "n"
+
+
+def test_cli_defaults_are_anchored_to_project_root(monkeypatch) -> None:
+    """The converter must not write into whatever directory it was launched from."""
+    monkeypatch.chdir("/")
+    assert semcor.DEFAULT_OUTPUT.is_absolute()
+    assert semcor.DEFAULT_CACHE_DIR.is_absolute()
     assert semcor._TREEBANK_PREFIX_TO_POS["V"] == "v"
     assert semcor._TREEBANK_PREFIX_TO_POS["J"] == "a"
     assert semcor._TREEBANK_PREFIX_TO_POS["R"] == "r"

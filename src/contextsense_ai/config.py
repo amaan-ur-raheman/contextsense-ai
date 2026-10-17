@@ -8,22 +8,35 @@ from pathlib import Path
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
+# Anchored here so relative defaults resolve to the project regardless of the
+# caller's working directory; a CWD-relative "data/" silently loads no sample.
+# shortcut: parents[2] points at site-packages for an installed wheel, so the
+# defaults stop tracking the repo; ship a data dir with the wheel or set DATA_DIR
+# when this is installed rather than run from a checkout.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _dir(env_var: str, default: str) -> Path:
+    """Resolve a directory setting, anchoring relative values to the project root."""
+    raw = Path(os.environ.get(env_var, default)).expanduser()
+    return raw if raw.is_absolute() else _PROJECT_ROOT / raw
+
 
 class Settings:
     """Application configuration.
 
-    Settings are loaded from environment variables or a .env file.
+    Settings are loaded from environment variables.
     """
 
     # Data directories
-    data_dir: Path = Path(os.environ.get("DATA_DIR", "data"))
-    raw_data_dir: Path = Path(os.environ.get("RAW_DATA_DIR", "data/raw"))
-    processed_data_dir: Path = Path(os.environ.get("PROCESSED_DATA_DIR", "data/processed"))
-    artifacts_dir: Path = Path(os.environ.get("ARTIFACTS_DIR", "artifacts"))
-    cache_dir: Path = Path(os.environ.get("CACHE_DIR", "~/.cache/contextsense_ai")).expanduser()
+    data_dir: Path = _dir("DATA_DIR", "data")
+    raw_data_dir: Path = _dir("RAW_DATA_DIR", "data/raw")
+    processed_data_dir: Path = _dir("PROCESSED_DATA_DIR", "data/processed")
+    artifacts_dir: Path = _dir("ARTIFACTS_DIR", "artifacts")
+    cache_dir: Path = _dir("CACHE_DIR", "~/.cache/contextsense_ai")
 
     # NLTK configuration
-    nltk_data_dir: Path = Path(os.environ.get("NLTK_DATA_DIR", "~/.nltk_data")).expanduser()
+    nltk_data_dir: Path = _dir("NLTK_DATA_DIR", "~/.nltk_data")
     nltk_download_timeout: int = int(os.environ.get("NLTK_DOWNLOAD_TIMEOUT", "300"))
 
     # Default embedding model

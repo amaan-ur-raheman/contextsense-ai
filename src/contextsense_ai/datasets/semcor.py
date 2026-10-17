@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from contextsense_ai.config import settings
 from contextsense_ai.utils.resource_manager import ensure_nltk_resources
 from contextsense_ai.wordnet_service import WordNetService
 
@@ -299,18 +300,23 @@ def drop_unusable(rows: pd.DataFrame) -> pd.DataFrame:
     return rows[keep]
 
 
+#: Absolute by construction, so the CLI writes to the project no matter the CWD.
+DEFAULT_OUTPUT = settings.data_dir / "datasets" / "semcor_brown.csv"
+DEFAULT_CACHE_DIR = settings.raw_data_dir
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Download and convert SemCor.")
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("data/datasets/semcor_brown.csv"),
+        default=DEFAULT_OUTPUT,
         help="Destination CSV.",
     )
     parser.add_argument(
         "--cache-dir",
         type=Path,
-        default=Path("data/raw"),
+        default=DEFAULT_CACHE_DIR,
         help="Where downloads are cached.",
     )
     args = parser.parse_args(argv)
