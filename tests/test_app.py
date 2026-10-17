@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from contextsense_ai.config import settings
+
 APP_PATH = Path(__file__).resolve().parent.parent / "app.py"
 
 
@@ -89,3 +91,26 @@ def test_uploaded_csv_is_loaded() -> None:
     text = [m.value for m in app.markdown]
     assert "Total examples: 1" in text
     assert "Valid: 1" in text
+
+
+def test_word2vec_toggle_is_honoured_on_submit() -> None:
+    """Checking the Word2Vec box must change the backend actually used.
+
+    The submit handler recomputed ``sentence_transformer`` unconditionally,
+    so the checkbox only ever changed the info panel. Loading Word2Vec is
+    skipped here because it needs a 1.5 GB manual download.
+    """
+    if any((settings.data_dir / "word2vec").glob("*.bin*")):
+        pytest.skip("Word2Vec vectors are installed; loading them is not a test.")
+
+    app = _app()
+    app.run()
+    # Both deltas must land in one run: a checkbox inside st.form does not
+    # commit until submit, so an intermediate run() re-reads it as False.
+    next(c for c in app.checkbox if "Word2Vec" in c.label).check()
+    next(b for b in app.button if "Disambiguate" in b.label).click().run()
+
+    assert not app.exception, f"submit raised {app.exception[0].value}"
+    assert any("word2vec" in e.value for e in app.error), (
+        "submission used the sentence-transformer backend despite the checkbox"
+    )

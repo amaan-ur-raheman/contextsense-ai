@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import cast
 
 # Ensure src/ is on the path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -17,12 +18,14 @@ import streamlit as st
 from contextsense_ai.config import settings
 from contextsense_ai.context_extractor import ContextExtractor
 from contextsense_ai.disambiguation.engine import disambiguate
+from contextsense_ai.embeddings.base import EmbeddingBackend
 from contextsense_ai.embeddings.sentence_transformer import SentenceTransformerBackend
 from contextsense_ai.embeddings.word2vec import Word2VecBackend
 from contextsense_ai.exceptions import ContextSenseError
 from contextsense_ai.schemas import (
     ContextStrategy,
     ModelVariant,
+    PredictionResult,
 )
 
 settings.ensure_directories()
@@ -148,9 +151,10 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 
 
-def get_backend(backend_name: str):
+def get_backend(backend_name: str) -> EmbeddingBackend | None:
     """Get or create an embedding backend instance."""
     if backend_name not in st.session_state.model_backends:
+        backend: EmbeddingBackend
         if backend_name == "sentence_transformer":
             backend = SentenceTransformerBackend()
         elif backend_name == "word2vec":
@@ -159,7 +163,7 @@ def get_backend(backend_name: str):
             return None
         st.session_state.model_backends[backend_name] = backend
         st.session_state.backend_loaded[backend_name] = False
-    return st.session_state.model_backends[backend_name]
+    return cast("EmbeddingBackend | None", st.session_state.model_backends[backend_name])
 
 
 def ensure_backend_loaded(backend_name: str) -> bool:
@@ -276,6 +280,8 @@ if pages[page] == "playground":
         st.divider()
 
         col_model, col_context = st.columns(2)
+        # Set from the checkbox above; read by the submit handler below.
+        backend_name: str | None = None
 
         with col_model:
             st.subheader("Model")
@@ -286,11 +292,15 @@ if pages[page] == "playground":
                 # Streamlit wants the positional index, not the option value.
                 index=list(ModelVariant).index(ModelVariant.SENTENCE_TRANSFORMER_WORDNET),
             )
+            if model_variant is None:  # Streamlit types the return as Optional
+                st.stop()
 
             if model_variant.requires_embedding:
-                backend_name = "sentence_transformer"
-                if st.checkbox("Use Word2Vec instead (requires manual download)", value=False):
-                    backend_name = "word2vec"
+                backend_name = (
+                    "word2vec"
+                    if st.checkbox("Use Word2Vec instead (requires manual download)", value=False)
+                    else "sentence_transformer"
+                )
 
                 backend = get_backend(backend_name)
                 if backend:
@@ -323,6 +333,8 @@ if pages[page] == "playground":
                 format_func=lambda s: s.value.replace("_", " ").title(),
                 horizontal=True,
             )
+            if context_strategy is None:  # Streamlit types the return as Optional
+                st.stop()
 
             if context_strategy == ContextStrategy.LOCAL_WINDOW:
                 window = st.slider(
@@ -364,7 +376,7 @@ if pages[page] == "playground":
     st.divider()
     st.subheader("📝 Try an example")
     example_cols = st.columns(4)
-    examples = [
+    example_buttons = [
         # "She deposited the cheque at the bank" resolves to bank.n.02, matching
         # the label. The previously shipped "I deposited money in the bank"
         # returned bank.n.08 (a container for money at home) and so failed the
@@ -380,6 +392,7 @@ if pages[page] == "playground":
         ("Spring: season", "Spring brings new life to the garden.", "spring"),
         ("Spring: mechanical", "The spring in the mattress broke.", "spring"),
     ]
+
     # Set the inputs from a callback rather than inline. Session state for a
     # widget key cannot be assigned after that widget has been instantiated,
     # and the inputs are rendered above these buttons. on_click runs before
@@ -390,7 +403,7 @@ if pages[page] == "playground":
         st.session_state.target_input = word
         st.session_state.prediction = None
 
-    for i, (label, sent, word) in enumerate(examples):
+    for i, (label, sent, word) in enumerate(example_buttons):
         with example_cols[i % 4]:
             st.button(
                 label,
@@ -408,9 +421,6 @@ if pages[page] == "playground":
         else:
             with st.spinner("Running disambiguation..."):
                 try:
-                    backend_name = (
-                        "sentence_transformer" if model_variant.requires_embedding else None
-                    )
                     embedding_backend = get_backend(backend_name) if backend_name else None
 
                     if embedding_backend and not ensure_backend_loaded(backend_name):
@@ -420,7 +430,7 @@ if pages[page] == "playground":
                         )
                         st.stop()
 
-                    result = disambiguate(
+                    playground_result = disambiguate(
                         sentence=sentence,
                         target_word=target_word,
                         occurrence_index=occurrence_idx,
@@ -432,12 +442,12 @@ if pages[page] == "playground":
                         lemmatize_context=lemmatize_context,
                     )
 
-                    st.session_state.prediction = result
+                    st.session_state.prediction = playground_result
 
-                    if result.success:
+                    if playground_result.success:
                         st.success("Disambiguation complete!")
                     else:
-                        st.warning(f"Could not disambiguate: {result.error_message}")
+                        st.warning(f"Could not disambiguate: {playground_result.error_message}")
 
                 except ContextSenseError as exc:
                     st.error(f"Error: {exc}")
@@ -522,6 +532,8 @@ elif pages[page] == "comparison":
 
         submitted = st.form_submit_button("🔍 Compare Models", type="primary")
 
+    results: dict[ModelVariant, PredictionResult | None] = {}
+
     if submitted and sentence and target_word:
         from contextsense_ai.preprocessing import (
             find_target_occurrences,
@@ -558,7 +570,6 @@ elif pages[page] == "comparison":
                         strategy=ContextStrategy.LOCAL_WINDOW,
                     )
 
-                    results = {}
                     for variant in ModelVariant:
                         if variant.requires_embedding:
                             try:
@@ -593,27 +604,27 @@ elif pages[page] == "comparison":
             results = st.session_state.comparison_results
         st.divider()
 
-        for variant, pred in results.items():
-            if pred is None:
+        for variant, entry in results.items():
+            if entry is None:
                 continue
             with st.expander(
                 f"{variant.display_name}",
                 expanded=(variant == ModelVariant.SENTENCE_TRANSFORMER_WORDNET),
             ):
-                if pred.success:
-                    st.markdown(f"**Predicted:** {pred.predicted_synset}")
-                    st.markdown(f"**Definition:** {pred.predicted_definition}")
-                    if pred.top_similarity_score is not None:
-                        st.metric("Similarity score", f"{pred.top_similarity_score:.4f}")
-                    if pred.ranked_candidates:
+                if entry.success:
+                    st.markdown(f"**Predicted:** {entry.predicted_synset}")
+                    st.markdown(f"**Definition:** {entry.predicted_definition}")
+                    if entry.top_similarity_score is not None:
+                        st.metric("Similarity score", f"{entry.top_similarity_score:.4f}")
+                    if entry.ranked_candidates:
                         st.markdown("**Ranked candidates:**")
-                        for c in pred.ranked_candidates[:5]:
+                        for c in entry.ranked_candidates[:5]:
                             st.markdown(
                                 f"- Rank {c.rank}: {c.synset_id} — {c.definition[:80]}... "
                                 f"(score: {c.similarity_score:.4f})"
                             )
                 else:
-                    st.error(f"Failed: {pred.error_message}")
+                    st.error(f"Failed: {entry.error_message}")
 
         # Agreement analysis
         st.divider()
