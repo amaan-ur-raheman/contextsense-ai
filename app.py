@@ -780,7 +780,7 @@ elif pages[page] == "evaluation":
             "Example format:\n"
             "| sentence | target_word | gold_synset | target_occurrence |\n"
             "|----------|-------------|-------------|-------------------|\n"
-            "| The bank approved the loan. | bank | bank.n.01 | 0 |"
+            "| The bank approved the loan. | bank | bank.n.02 | 0 |"
         )
 
         uploaded = st.file_uploader("Upload CSV", type=["csv"])
@@ -951,20 +951,26 @@ elif pages[page] == "about":
 
             A synset is a set of synonyms that represent a single distinct concept.
 
-            Example: The synset **bank.n.01** contains:
+            Example: The synset **bank.n.02** contains:
             - bank
-            - banking_instiution
-            - financial_institution
+            - banking_concern
+            - banking_company
+            - depository_financial_institution
+
+            Its gloss is "a financial institution that holds money deposits".
 
             ### Synset ID Format
 
-            WordNet synsets use the format: `lemma.pos.offset`
+            WordNet sense identifiers use the format: `lemma.pos.sense_number`
 
             - **lemma**: A representative word for the sense
             - **pos**: Part of speech (n=noun, v=verb, a=adjective, r=adverb)
-            - **offset**: A unique numeric identifier
+            - **sense_number**: That sense's position among the lemma's senses,
+              counting from 01 in the order WordNet stores them
 
-            Example: `bank.n.01` = the first noun sense of "bank"
+            The numbering is per-lemma, so the financial sense of "bank" is
+            `bank.n.02`, not `bank.n.01`. WordNet stores the landform sense
+            ("sloping land beside a body of water") first.
 
             ### Semantic Relations
 
@@ -1094,8 +1100,10 @@ elif pages[page] == "about":
               fine-grained sense distinctions
 
             ### 4. Evaluation Dataset
-            Our sample dataset is small and for demonstration only.
-            SemCor and other benchmark datasets would provide more reliable evaluation.
+            The bundled 8-example sample is for demonstration only. The SemCor
+            conversion and evaluation code ship here; the corpus itself is
+            fetched on demand. Run `uv run run-evaluation` to reproduce, and see
+            the committed results in `docs/evaluation.md`.
 
             ### 5. Baseline Limitations
             - First-sense baseline doesn't use context
@@ -1108,9 +1116,8 @@ elif pages[page] == "about":
             2. **Sense embeddings**: Train dedicated sense embeddings rather than using descriptions
             3. **Fine-tuned transformers**: Fine-tune a transformer on WSD tasks
             4. **Ensemble methods**: Combine multiple approaches
-            5. **Larger evaluation**: Evaluate on SemCor, SemEval, or other WSD benchmarks
-            6. **POS tagging integration**: Use POS to filter candidates more accurately
-            7. **Domain adaptation**: Adjust for specific domains (medical, legal, etc.)
+            5. **Wider benchmarks**: Evaluate on SemEval or other WSD benchmarks
+            6. **Domain adaptation**: Adjust for specific domains (medical, legal, etc.)
             """
         )
 
