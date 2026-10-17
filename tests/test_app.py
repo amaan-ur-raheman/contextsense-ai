@@ -66,3 +66,26 @@ def test_default_sentence_is_populated() -> None:
     assert not app.exception
     assert app.text_area[0].value
     assert app.text_input[0].value
+
+
+def test_uploaded_csv_is_loaded() -> None:
+    """The Upload CSV tab must accept a Streamlit upload.
+
+    ``load_csv_dataset`` called ``Path()`` on its argument, so a real
+    ``UploadedFile`` raised ``TypeError`` and the tab only ever failed, while
+    the page still rendered normally.
+    """
+    app = _app()
+    app.run()
+    app.radio[1].set_value("📈 Dataset Evaluation").run()
+
+    app.file_uploader[0].upload(
+        "probe.csv",
+        b"sentence,target_word,gold_synset\nShe deposited the cheque at the bank.,bank,bank.n.02\n",
+        "text/csv",
+    ).run()
+
+    assert not app.exception, f"upload raised {app.exception[0].value}"
+    text = [m.value for m in app.markdown]
+    assert "Total examples: 1" in text
+    assert "Valid: 1" in text

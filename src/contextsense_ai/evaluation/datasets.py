@@ -6,6 +6,7 @@ import contextlib
 import json
 from enum import StrEnum
 from pathlib import Path
+from typing import IO
 
 import pandas as pd
 
@@ -138,7 +139,7 @@ def _create_default_sample_examples() -> list[DatasetExample]:
 
 
 def load_csv_dataset(
-    filepath: str | Path,
+    filepath: str | Path | IO[bytes],
     *,
     sentence_col: str = "sentence",
     target_col: str = "target_word",
@@ -153,7 +154,7 @@ def load_csv_dataset(
     Optional columns: target_occurrence, pos, id.
 
     Args:
-        filepath: Path to the CSV file.
+        filepath: Path to the CSV file, or an already-open binary stream.
         sentence_col: Column name for sentences.
         target_col: Column name for target words.
         gold_col: Column name for gold synset IDs.
@@ -164,12 +165,19 @@ def load_csv_dataset(
     Returns:
         List of validated DatasetExample objects.
     """
-    path = Path(filepath)
-    if not path.exists():
-        raise EvaluationError(f"Dataset file not found: {path}")
+    if isinstance(filepath, (str, Path)):
+        path = Path(filepath)
+        if not path.exists():
+            raise EvaluationError(f"Dataset file not found: {path}")
+        source: str | Path | IO[bytes] = path
+        dataset_name = path.name
+    else:
+        # An uploaded file has no filesystem location; read straight off the stream.
+        source = filepath
+        dataset_name = getattr(filepath, "name", "uploaded.csv")
 
     try:
-        df = pd.read_csv(path)
+        df = pd.read_csv(source)
     except Exception as exc:
         raise EvaluationError(f"Failed to read CSV file: {exc}") from exc
 
@@ -235,7 +243,7 @@ def load_csv_dataset(
                 target_occurrence=occurrence,
                 gold_synset=gold,
                 pos=pos,
-                dataset_name=str(path.name),
+                dataset_name=dataset_name,
                 is_valid=True,
             )
         )
