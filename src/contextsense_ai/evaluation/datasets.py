@@ -11,14 +11,8 @@ from typing import IO
 import pandas as pd
 
 from contextsense_ai.config import settings
-from contextsense_ai.embeddings.base import EmbeddingBackend
 from contextsense_ai.exceptions import EvaluationError
-from contextsense_ai.schemas import (
-    ContextStrategy,
-    DatasetExample,
-    ModelVariant,
-    PredictionResult,
-)
+from contextsense_ai.schemas import DatasetExample
 from contextsense_ai.wordnet_service import WordNetService
 
 
@@ -249,27 +243,3 @@ def load_csv_dataset(
         )
 
     return examples
-
-
-def evaluate_example(
-    example: DatasetExample,
-    model_variant: ModelVariant,
-    embedding_backend: EmbeddingBackend | None = None,
-    *,
-    context_strategy: ContextStrategy = ContextStrategy.LOCAL_WINDOW,
-    context_window: int = 5,
-    stopword_filtering: bool = False,
-    lemmatize_context: bool = False,
-) -> PredictionResult:
-    """Run disambiguation on a single example and return the prediction."""
-    from contextsense_ai.evaluation.metrics import predict_example
-
-    return predict_example(
-        example,
-        model_variant,
-        embedding_backend,
-        context_strategy=context_strategy,
-        context_window=context_window,
-        stopword_filtering=stopword_filtering,
-        lemmatize_context=lemmatize_context,
-    )

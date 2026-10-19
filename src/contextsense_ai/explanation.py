@@ -93,12 +93,3 @@ def generate_explanation(result: PredictionResult) -> list[tuple[str, str]]:
         steps.append(("Note", warning))
 
     return steps
-
-
-def format_similarity_note() -> str:
-    """Return a note about interpreting similarity scores."""
-    return (
-        "Similarity scores indicate how closely the context vector aligns with each "
-        "candidate sense vector. They are NOT probabilities and do NOT represent "
-        "confidence that the prediction is correct."
-    )

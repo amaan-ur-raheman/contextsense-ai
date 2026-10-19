@@ -26,8 +26,6 @@ def compute_metrics(
     predictions: dict[str, PredictionResult],
     *,
     model_variant: ModelVariant,
-    # parameters for computing metrics
-    require_exact_match: bool = True,
 ) -> EvaluationMetrics:
     """Compute evaluation metrics for a model on a dataset.
 
@@ -35,7 +33,6 @@ def compute_metrics(
         examples: List of dataset examples with gold labels.
         predictions: Dict mapping example IDs to PredictionResults.
         model_variant: The model variant being evaluated.
-        require_exact_match: Whether to require exact synset match.
 
     Returns:
         EvaluationMetrics with computed scores.
@@ -55,19 +52,8 @@ def compute_metrics(
             skipped_count += 1
             continue
 
-        gold = example.gold_synset
-        predicted = pred.predicted_synset_id
-
-        if require_exact_match:
-            y_true.append(gold)
-            y_pred.append(predicted)
-        else:
-            # Relaxed matching collapses both sides onto the synset's identity
-            # (POS + offset), ignoring which lemma keyed it. A relaxed hit is
-            # credited by emitting the gold label so the confusion matrix
-            # stays meaningful.
-            y_true.append(gold)
-            y_pred.append(gold if _synset_match(gold, predicted) else predicted)
+        y_true.append(example.gold_synset)
+        y_pred.append(pred.predicted_synset_id)
 
     if not y_true:
         return EvaluationMetrics(
@@ -155,31 +141,6 @@ def compute_metrics(
         confusion_matrix=cm_list,
         labels=labels,
     )
-
-
-def _synset_match(gold: str, predicted: str) -> bool:
-    """Check whether a predicted sense refers to the same synset as the gold.
-
-    String equality covers the common case. When the IDs differ, both are
-    resolved through WordNet and compared by synset offset, which catches
-    predictions keyed by a different lemma (e.g. gold ``bank.n.02`` versus a
-    prediction of ``depository_financial_institution.n.01``).
-    """
-    if not gold or not predicted:
-        return False
-    if gold == predicted:
-        return True
-
-    try:
-        from contextsense_ai.wordnet_service import WordNetService
-
-        service = WordNetService()
-        gold_syn = service.get_synset_from_id(gold)
-        pred_syn = service.get_synset_from_id(predicted)
-    except Exception:
-        return False
-
-    return gold_syn is not None and pred_syn is not None and gold_syn.offset() == pred_syn.offset()
 
 
 def predict_example(

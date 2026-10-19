@@ -1,15 +1,12 @@
-"""Resource management for NLTK data and embedding model caching."""
+"""Resource management for NLTK data."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 import nltk
-from nltk.corpus.reader.wordnet import WordNetCorpusReader
 
 from contextsense_ai.config import settings
-from contextsense_ai.exceptions import ResourceError
 from contextsense_ai.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -104,75 +101,3 @@ def _ensure_package(package: str, data_dir: Path) -> bool:
 def resource_report() -> dict[str, str]:
     """Return the status of each resource checked by the last call."""
     return dict(_LAST_REPORT)
-
-
-def get_wordnet_reader() -> WordNetCorpusReader:
-    """Return the WordNet corpus reader, downloading if necessary."""
-    if not ensure_nltk_resources():
-        raise ResourceError(
-            "WordNet resources not available. Run: "
-            "uv run python -m contextsense_ai.scripts.download_resources"
-        )
-    return nltk.corpus.wordnet
-
-
-class ResourceManager:
-    """Manages the lifecycle of heavy resources (embedding models).
-
-    Loaders are registered up front and invoked lazily on first access, so an
-    expensive model is only loaded when something actually needs it.
-    """
-
-    def __init__(self) -> None:
-        self._loaders: dict[str, Callable[[], object]] = {}
-        self._models: dict[str, object] = {}
-        self._status: dict[str, str] = {}
-
-    def register(
-        self,
-        name: str,
-        loader: Callable[[], object],
-        *,
-        description: str = "",
-    ) -> None:
-        """Register a model loader without immediately loading it."""
-        if description:
-            logger.debug("Registered resource '%s': %s", name, description)
-        self._loaders[name] = loader
-        self._models.pop(name, None)
-        self._status[name] = "registered"
-
-    def get(self, name: str) -> object:
-        """Get a model, loading it on first access."""
-        if name in self._models:
-            return self._models[name]
-
-        loader = self._loaders.get(name)
-        if loader is None:
-            raise ResourceError(f"Unknown resource: '{name}'.")
-
-        try:
-            model = loader()
-        except Exception:
-            self._status[name] = "error"
-            logger.exception("Failed to load resource '%s'", name)
-            raise
-
-        self._models[name] = model
-        self._status[name] = "loaded"
-        logger.info("Loaded resource: %s", name)
-        return model
-
-    def status(self, name: str) -> str:
-        """Return the current status of a named resource."""
-        return self._status.get(name, "unknown")
-
-    def release(self, name: str) -> None:
-        """Release a single loaded resource."""
-        if self._models.pop(name, None) is not None:
-            logger.info("Released resource: %s", name)
-
-    def release_all(self) -> None:
-        """Release every loaded resource."""
-        for name in list(self._models):
-            self.release(name)

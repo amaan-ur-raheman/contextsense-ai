@@ -9,7 +9,6 @@ from pathlib import Path
 import pandas as pd
 
 from contextsense_ai.embeddings.base import EmbeddingBackend
-from contextsense_ai.evaluation.metrics import compute_metrics, predict_example
 from contextsense_ai.exceptions import EvaluationError
 from contextsense_ai.schemas import (
     ContextStrategy,
@@ -64,25 +63,23 @@ def run_evaluation(
     context_strategy = ContextStrategy(context_strategy)
     model_variant = ModelVariant(model_variant)
 
-    predictions: dict[str, PredictionResult] = {}
-    prediction_list: list[PredictionResult] = []
-
-    for example in examples:
-        if not example.is_valid:
-            continue
-        pred = predict_example(
-            example,
-            model_variant,
-            embedding_backend,
-            context_strategy=context_strategy,
-            context_window=context_window,
-            stopword_filtering=stopword_filtering,
-            lemmatize_context=lemmatize_context,
+    prediction_list, metrics = evaluate_single_variant(
+        examples=examples,
+        model_variant=model_variant,
+        embedding_backend=embedding_backend,
+        context_strategy=context_strategy,
+        context_window=context_window,
+        stopword_filtering=stopword_filtering,
+        lemmatize_context=lemmatize_context,
+    )
+    # Keyed by example id, same idiom as run_model_comparison: invalid rows are
+    # skipped, so the two iterators line up exactly.
+    predictions = {
+        example.id: pred
+        for example, pred in zip(
+            (e for e in examples if e.is_valid), prediction_list, strict=True
         )
-        predictions[example.id] = pred
-        prediction_list.append(pred)
-
-    metrics = compute_metrics(examples, predictions, model_variant=model_variant)
+    }
 
     result = EvaluationResult(
         dataset_name=dataset_name,
