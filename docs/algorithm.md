@@ -34,7 +34,7 @@ ambiguous word in context.
 For each synset of the target word:
     1. Get synset from WordNet
     2. Extract:
-       - Synset ID (lemma.pos.offset)
+       - Synset ID (lemma.pos.sense_number, relative to the target word)
        - Part of speech
        - Lemmas (synonym set)
        - Definition (gloss)

@@ -63,19 +63,21 @@ examples the others score, and the comparison stops being like-for-like.
 
 ```csv
 sentence,target_word,gold_synset,target_occurrence
-"I deposited money in the bank.",bank,bank.n.01,0
-"The fisherman sat near the bank of the river.",bank,bank.n.03,0
+"I deposited money in the bank.",bank,bank.n.02,0
+"The fisherman sat near the bank of the river.",bank,bank.n.01,0
 ```
 
 ## Gold Labels
 
-Gold labels must be valid WordNet synset IDs in the format `lemma.pos.offset`.
+Gold labels must be valid WordNet sense IDs in the format
+`lemma.pos.sense_number`, where the number counts that sense among the lemma's
+senses of the same part of speech.
 
 Example valid synset IDs:
-- `bank.n.01` - financial institution
-- `bank.n.03` - river bank
-- `bat.n.01` - sports equipment
-- `bat.n.02` - flying mammal
+- `bank.n.02` - financial institution
+- `bank.n.01` - river bank
+- `bat.n.05` - sports equipment
+- `bat.n.01` - flying mammal
 
 The evaluation validates that each gold synset ID exists in WordNet.
 

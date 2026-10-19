@@ -40,12 +40,18 @@ A synset (synonym set) is a set of synonyms that represent a single distinct con
 
 ### 8. What is a synset ID and what is its format?
 
-A synset ID has the format `lemma.pos.offset`:
-- `lemma`: A representative word for the sense
+A synset ID has the format `lemma.pos.sense_number`:
+- `lemma`: The word being disambiguated, not necessarily the synset's first lemma
 - `pos`: Part of speech code (n=noun, v=verb, a=adjective, r=adverb)
-- `offset`: A unique numeric identifier
+- `sense_number`: That sense's position among the lemma's senses of the same POS, counting from 01 in WordNet's stored order. It is a sense index, not a synset offset.
 
-Example: `bank.n.01` refers to the first noun sense of "bank".
+Example: `bank.n.02` is the second noun sense of "bank" — the financial institution.
+`bank.n.01` is the riverbank.
+
+The numbering is per-lemma. WordNet's own `synset.name()` keys a synset on its
+first lemma, so the financial sense of "bank" comes back as
+`depository_financial_institution.n.01`; this project always reports IDs
+relative to the target word so gold labels can match predictions.
 
 ### 9. How does ContextSense AI use WordNet?
 
@@ -231,7 +237,7 @@ All embedding backends implement the `EmbeddingBackend` abstract base class with
 
 ### 40. How does the system handle model loading?
 
-Models are loaded lazily on first use, not at startup. The Sentence Transformer model is cached in memory after loading. Streamlit's `st.cache_resource` pattern is used to avoid reloading on every UI interaction. The Word2Vec model requires manual download and is loaded on demand.
+Models are loaded lazily on first use, not at startup. The Sentence Transformer model is held in `st.session_state` after loading, so it survives Streamlit reruns within a session. Note the tradeoff: because it is session state rather than `st.cache_resource`, the model is *not* shared between browser sessions, so each visitor pays the load once. Sense vectors are memoised process-wide and shared. The Word2Vec model requires manual download and is loaded on demand.
 
 ## Limitations
 
@@ -239,11 +245,12 @@ Models are loaded lazily on first use, not at startup. The Sentence Transformer 
 
 1. **Context window**: Local window may miss relevant long-range context
 2. **Sense descriptions**: WordNet definitions may not distinguish closely related senses
-3. **Mean pooling**: Loses word order and treats all words equally
+3. **Mean pooling (Word2Vec backend only)**: Loses word order and treats all words equally. The default Sentence Transformers backend encodes the context as a sequence and is unaffected.
 4. **Static embeddings**: Word2Vec cannot adapt to context
 5. **No syntactic parsing**: Does not use dependency relations
 6. **Small demo dataset**: Sample examples are not a benchmark
 7. **No training**: The system uses pretrained models, not task-specific training
+8. **Context adds little over frequency**: On the 3,000-row SemCor benchmark the embedding model (0.3317) is not significantly better than the most-frequent-sense baseline (0.3280). See `docs/evaluation.md`.
 
 ### 42. Why might Sentence Transformers fail for WSD?
 

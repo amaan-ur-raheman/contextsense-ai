@@ -123,8 +123,8 @@ WordNet is kept independent of the UI and embedding layers.
 
 - **NLTK resources**: Downloaded once via `uv run download-resources`
 - **Sentence Transformers**: Lazy-loaded on first use, cached in memory
-- **Word2Vec**: Must be manually downloaded, loaded on demand
-- **Streamlit caching**: `st.cache_resource` for models, `st.cache_data` for computed data
+- **Word2Vec**: Must be manually downloaded, loaded on demand. Its cache identity includes the vectors filename, so loading a different file never reuses the previous file's cached sense vectors.
+- **Streamlit caching**: Models are held in `st.session_state` rather than behind `st.cache_resource`, so each browser session loads its own copy. Sense vectors are memoised process-wide in `engine._SENSE_VECTOR_CACHE` and shared across sessions.
 
 ## UI/Backend Separation
 

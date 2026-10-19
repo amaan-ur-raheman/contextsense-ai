@@ -9,7 +9,7 @@
 
 An educational Word Sense Disambiguation (WSD) system that combines lexical knowledge from WordNet with embedding-based semantic similarity. Built for undergraduate NLP projects, classroom demonstrations, and technical presentations.
 
-![Architecture Diagram](docs/architecture.md)
+> Architecture: see [docs/architecture.md](docs/architecture.md).
 
 ## Table of Contents
 
@@ -31,7 +31,6 @@ An educational Word Sense Disambiguation (WSD) system that combines lexical know
 - [Sample Inputs](#sample-inputs)
 - [Troubleshooting](#troubleshooting)
 - [Configuration](#configuration)
-- [Project Structure](#project-structure)
 - [Limitations](#limitations)
 - [Future Improvements](#future-improvements)
 - [References](#references)
@@ -171,14 +170,18 @@ contextsense-ai/
 │   │   ├── datasets.py             # Dataset loading and validation
 │   │   ├── metrics.py              # Evaluation metrics computation
 │   │   └── experiments.py          # Experiment running and export
+│   ├── datasets/
+│   │   ├── __init__.py
+│   │   └── semcor.py               # SemCor download and label conversion
 │   ├── scripts/
 │   │   ├── download_resources.py   # Download NLTK resources
 │   │   └── run_evaluation.py       # CLI evaluation runner
 │   └── utils/
 │       ├── __init__.py
-│       ├── resource_manager.py     # Resource lifecycle management
+│       ├── resource_manager.py     # NLTK resource availability
 │       └── logging_config.py       # Logging setup
 ├── tests/
+│   ├── conftest.py                 # Pytest configuration and fixtures
 │   ├── test_preprocessing.py       # Preprocessing tests
 │   ├── test_wordnet_service.py     # WordNet tests
 │   ├── test_context_extractor.py   # Context extraction tests
@@ -186,15 +189,17 @@ contextsense-ai/
 │   ├── test_disambiguation.py      # Disambiguation engine tests
 │   ├── test_datasets.py            # Dataset loading tests
 │   ├── test_metrics.py             # Metrics computation tests
+│   ├── test_word2vec_backend.py    # Word2Vec backend tests
+│   ├── test_semcor_dataset.py      # SemCor conversion tests
+│   ├── test_app.py                 # Streamlit UI tests
 │   └── test_regressions.py         # Regression tests for fixed defects
 ├── data/
 │   ├── README.md                   # Data directory documentation
 │   ├── sample_examples.json        # Built-in demonstration examples
-│   ├── .gitkeep
-│   └── processed/
-│       └── .gitkeep
-├── artifacts/
-│   └── .gitkeep                    # Evaluation results storage
+│   ├── raw/                        # Download cache (gitignored)
+│   ├── datasets/                   # Converted evaluation sets (gitignored)
+│   └── word2vec/                   # Optional Word2Vec vectors (gitignored)
+├── artifacts/                      # Evaluation results (gitignored)
 └── docs/
     ├── architecture.md             # System architecture documentation
     ├── algorithm.md                # Algorithm description and pseudocode
@@ -239,7 +244,7 @@ uv sync --extra dev
 uv run python --version
 
 # Verify imports work
-uv run python -c "from contextsense import settings; print('OK')"
+uv run python -c "from contextsense_ai import settings; print('OK')"
 ```
 
 ## Downloading Resources
@@ -356,8 +361,8 @@ The Model Comparison page lets you run the same input through all available meth
 
 ```csv
 sentence,target_word,gold_synset,target_occurrence
-"I deposited money in the bank.",bank,bank.n.01,0
-"The fisherman sat near the bank of the river.",bank,bank.n.03,0
+"I deposited money in the bank.",bank,bank.n.02,0
+"The fisherman sat near the bank of the river.",bank,bank.n.01,0
 ```
 
 Required columns: `sentence`, `target_word`, `gold_synset`
@@ -450,13 +455,21 @@ uv run ruff format .
 
 ### Synset ID Format
 
-WordNet synset IDs use the format: `lemma.pos.offset`
+Sense IDs use the format `lemma.pos.sense_number`, where the number counts
+that sense among the lemma's senses of the same part of speech, starting at 01
+in the order WordNet stores them. The number is a sense index, **not** a synset
+offset.
 
 Examples:
-- `bank.n.01` - financial institution
-- `bank.n.03` - river bank
-- `bat.n.01` - sports equipment
-- `bat.n.02` - flying mammal
+- `bank.n.02` - financial institution
+- `bank.n.01` - river bank
+- `bat.n.05` - sports equipment
+- `bat.n.01` - flying mammal
+
+WordNet's own `synset.name()` keys a synset on its *first* lemma, so the
+financial sense of "bank" comes back as `depository_financial_institution.n.01`.
+This project always reports IDs relative to the word being disambiguated, so
+gold labels from a corpus can actually match a prediction.
 
 ## Evaluation Workflow
 
@@ -508,8 +521,8 @@ Create a CSV like this:
 
 ```csv
 sentence,target_word,gold_synset
-"I deposited money in the bank.",bank,bank.n.01
-"The fisherman sat near the bank of the river.",bank,bank.n.03
+"I deposited money in the bank.",bank,bank.n.02
+"The fisherman sat near the bank of the river.",bank,bank.n.01
 ```
 
 ## Troubleshooting
@@ -568,32 +581,42 @@ python -m nltk.downloader wordnet omw-1.4 punkt_tab averaged_perceptron_tagger_e
 
 ## Configuration
 
-Create a `.env` file based on `.env.example` to customize settings:
+Settings are read from **environment variables** at import time. The project
+does not parse a `.env` file itself, so copying `.env.example` to `.env` has no
+effect on its own — export the variables in your shell, or load them however
+you prefer (direnv, `uv run --env-file`, your shell profile).
 
-```bash
-cp .env.example .env
-```
-
-Key settings:
+`.env.example` lists every variable the code reads. The main ones:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `DATA_DIR` | data | Main data directory |
+| `RAW_DATA_DIR` | data/raw | Download cache (WordNet 3.0, SemCor CSVs) |
+| `PROCESSED_DATA_DIR` | data/processed | Derived datasets |
+| `ARTIFACTS_DIR` | artifacts | Where evaluation results are written |
 | `NLTK_DATA_DIR` | ~/.nltk_data | NLTK data location |
-| `DEFAULT_EMBEDDING_BACKEND` | sentence_transformer | Default embedding model |
+| `NLTK_DOWNLOAD_TIMEOUT` | 300 | Seconds allowed per NLTK download |
+| `DEFAULT_EMBEDDING_BACKEND` | sentence_transformer | Default embedding backend |
 | `DEFAULT_SENTENCE_TRANSFORMER_MODEL` | all-MiniLM-L6-v2 | ST model name |
+| `DEFAULT_WORD2VEC_MODEL` | GoogleNews-vectors-negative300.bin.gz | Expected vectors filename |
 | `DEFAULT_CONTEXT_WINDOW` | 5 | Default context window size |
+| `MIN_CONTEXT_WINDOW` / `MAX_CONTEXT_WINDOW` | 1 / 20 | Bounds the window slider |
+| `DEFAULT_TEST_SPLIT` | 0.2 | Reserved test split fraction |
 | `RANDOM_SEED` | 42 | Random seed for reproducibility |
+
+Relative directory values resolve against the project root, not the shell's
+working directory.
 
 ## Limitations
 
 1. **Not a production system**: This is an educational demonstration
 2. **Context window limitations**: Local window may miss relevant words
 3. **Sense description quality**: WordNet definitions may not distinguish closely related senses
-4. **Mean pooling**: Loses word order and treats all words equally
+4. **Word2Vec mean pooling**: The Word2Vec backend mean-pools token vectors, losing word order and treating all words equally. The default backend (Sentence Transformers) encodes the context as a sequence and is not affected.
 5. **No training**: Uses pretrained models, not task-specific training
 6. **Small demo dataset**: The bundled 8-example sample is not a benchmark; the SemCor evaluation is the benchmark, and its conversion and evaluation code ship in this project (the corpus itself is fetched on demand)
 7. **Similarity ≠ probability**: Scores indicate vector alignment, not prediction confidence
+8. **Context does not reliably beat a frequency lookup**: On the 3,000-row SemCor benchmark the embedding model scores 0.3317 against 0.3280 for the most-frequent-sense baseline — a difference that is within noise. See [docs/evaluation.md](docs/evaluation.md#measured-results).
 
 ## Future Improvements
 
