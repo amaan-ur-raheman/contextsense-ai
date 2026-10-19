@@ -79,6 +79,17 @@ class EmbeddingBackend(ABC):
     def is_available(self) -> bool:
         """Check whether the backend and its model are available."""
 
+    @property
+    def cache_identity(self) -> str:
+        """A key that changes whenever this backend would produce different vectors.
+
+        Callers memoise per-model artifacts under this. It must separate two
+        backends that report the same ``model_info.name`` but can hold
+        different vectors.
+        """
+        info = self.model_info
+        return info.name if info else "backend"
+
     @abstractmethod
     def load(self) -> None:
         """Load or initialize the model."""

@@ -71,7 +71,7 @@ def _encode_sense(
     over a second of redundant work per example, which dominates any evaluation
     over a real corpus.
     """
-    cache_key = (_backend_name(backend) or "backend", candidate.synset_offset)
+    cache_key = (backend.cache_identity, candidate.synset_offset)
     cached = _SENSE_VECTOR_CACHE.get(cache_key)
     if cached is not None:
         return cached

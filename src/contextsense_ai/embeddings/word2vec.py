@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 # Module-level cached model to avoid reloading
 _word2vec_model: Any = None
 _word2vec_available: bool = False
+_word2vec_path: Path | None = None
 
 
 class Word2VecBackend(EmbeddingBackend):
@@ -31,8 +32,19 @@ class Word2VecBackend(EmbeddingBackend):
     """
 
     def __init__(self) -> None:
-        self._model_path: Path | None = None
         self._loaded = False
+
+    @property
+    def cache_identity(self) -> str:
+        """Identify the backend by the vectors file it actually loaded.
+
+        The model file is discovered by scanning the model directory, so two
+        different files both report the configured default name while holding
+        completely different vectors. Caching under that name alone reused one
+        file's vectors after another was loaded, without any signal.
+        """
+        name = super().cache_identity
+        return f"{name}:{_word2vec_path.name}" if _word2vec_path else name
 
     @property
     def model_info(self) -> EmbeddingModelInfo:
@@ -53,7 +65,7 @@ class Word2VecBackend(EmbeddingBackend):
 
     def load(self) -> None:
         """Load the Word2Vec model from local path or download location."""
-        global _word2vec_model, _word2vec_available
+        global _word2vec_model, _word2vec_available, _word2vec_path
 
         if _word2vec_available and _word2vec_model is not None:
             self._loaded = True
@@ -82,6 +94,7 @@ class Word2VecBackend(EmbeddingBackend):
             _word2vec_model = kv.KeyedVectors.load_word2vec_format(
                 str(model_file), binary=True, limit=500000
             )
+            _word2vec_path = model_file
             _word2vec_available = True
             self._loaded = True
             logger.info(
@@ -122,9 +135,10 @@ class Word2VecBackend(EmbeddingBackend):
 
     def release(self) -> None:
         """Release the loaded model."""
-        global _word2vec_model, _word2vec_available
+        global _word2vec_model, _word2vec_available, _word2vec_path
         _word2vec_model = None
         _word2vec_available = False
+        _word2vec_path = None
         self._loaded = False
 
     def is_available(self) -> bool:

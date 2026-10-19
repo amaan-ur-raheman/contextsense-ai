@@ -471,6 +471,37 @@ def test_sense_cache_is_keyed_by_model() -> None:
     clear_sense_vector_cache()
 
 
+def test_word2vec_cache_identity_includes_the_vectors_file() -> None:
+    """Switching Word2Vec vector files must not reuse the previous file's vectors.
+
+    ``Word2VecBackend`` discovers its vectors file by scanning the model
+    directory, so two different files both report the configured default name
+    while holding entirely different vectors. The sense-vector cache was keyed
+    on that name, so loading a second file silently served the first file's
+    vectors for every synset.
+    """
+    from pathlib import Path
+
+    from contextsense_ai.embeddings import word2vec as w2v_module
+    from contextsense_ai.embeddings.word2vec import Word2VecBackend
+
+    backend = Word2VecBackend()
+    original = w2v_module._word2vec_path
+    try:
+        w2v_module._word2vec_path = None
+        unloaded = backend.cache_identity
+        w2v_module._word2vec_path = Path("data/word2vec/first.bin")
+        first = backend.cache_identity
+        w2v_module._word2vec_path = Path("data/word2vec/second.bin.gz")
+        second = backend.cache_identity
+    finally:
+        w2v_module._word2vec_path = original
+
+    # All three report the same model name, so the name alone cannot be the key.
+    assert first != second, "different vector files produced the same cache identity"
+    assert unloaded == backend.model_info.name
+
+
 def test_every_candidate_contains_the_target_as_a_lemma() -> None:
     """wn.synsets only returns synsets containing the word, so IDs stay well formed."""
     service = WordNetService()
