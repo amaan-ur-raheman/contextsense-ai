@@ -16,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 import streamlit as st
 
 from contextsense_ai.config import settings
-from contextsense_ai.context_extractor import ContextExtractor
 from contextsense_ai.disambiguation.engine import disambiguate
 from contextsense_ai.embeddings.base import EmbeddingBackend
 from contextsense_ai.embeddings.sentence_transformer import SentenceTransformerBackend
@@ -57,98 +56,246 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# State management
-# ---------------------------------------------------------------------------
-
-state = st.session_state
-
-# ---------------------------------------------------------------------------
 # Styling
 # ---------------------------------------------------------------------------
 
 st.markdown(
     """
     <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
-        background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin-bottom: 0.5rem;
+    /* Colour lives in .streamlit/config.toml. This block only handles the two
+       things a config file cannot express: a spacing/hierarchy scale, and the
+       interactive states Streamlit leaves half-built (focus rings especially).
+       Every selector here is scoped to a class Streamlit owns, so a rename
+       upstream degrades to "unstyled" rather than to something broken. */
+
+    /* ---- scale ---------------------------------------------------------- */
+    :root {
+        --cs-space-1: 0.25rem;
+        --cs-space-2: 0.5rem;
+        --cs-space-3: 0.75rem;
+        --cs-space-4: 1rem;
+        --cs-space-6: 1.5rem;
+        --cs-space-8: 2rem;
+        /* ease-out curves, not ease-in: motion that starts slow reads as lag at
+           exactly the moment the user is watching. */
+        --cs-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+        --cs-fast: 140ms;
+        --cs-base: 180ms;
     }
-    .sub-header {
-        font-size: 1.1rem;
-        color: #6b7280;
-        margin-bottom: 2rem;
+
+    /* Streamlit renders wide containers; pull the measure in so prose stays
+       inside the 65-75ch comfortable range instead of running edge to edge. */
+    .block-container {
+        padding-top: var(--cs-space-8);
+        padding-bottom: var(--cs-space-8);
+        max-width: 68rem;
     }
-    .metric-card {
-        background: #f8fafc;
-        border-radius: 8px;
-        padding: 1rem;
-        border: 1px solid #e2e8f0;
+
+    /* ---- headings ------------------------------------------------------- */
+    h1, h2, h3 {
+        letter-spacing: -0.02em;   /* -0.04em is the floor; tighter looks cramped */
+        text-wrap: balance;
     }
-    .prediction-card {
-        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-        border-radius: 12px;
-        padding: 1.5rem;
-        border-left: 4px solid #3b82f6;
+    h1 { line-height: 1.2; }
+    p, li { text-wrap: pretty; }
+
+    /* The emoji-glyph in a page title is decoration next to a real label.
+       Dim it so it reads as a marker, not as the loudest thing on screen. */
+    h1 img, h2 img, h3 img {
+        opacity: 0.75;
+        margin-right: 0.15em;
     }
-    .warning-badge {
-        background: #fef3c7;
-        color: #92400e;
-        padding: 0.25rem 0.75rem;
-        border-radius: 9999px;
+
+    /* ---- buttons -------------------------------------------------------- */
+    /* Give every button a press response. Without :active scale the UI feels
+       like it did not hear the click. 0.97 is small enough to read as
+       feedback rather than as a cartoon. */
+    .stButton > button,
+    .stFormSubmitButton > button {
+        transition: transform var(--cs-fast) var(--cs-ease-out),
+                    background-color var(--cs-fast) var(--cs-ease-out),
+                    border-color var(--cs-fast) var(--cs-ease-out),
+                    color var(--cs-fast) var(--cs-ease-out),
+                    box-shadow var(--cs-fast) var(--cs-ease-out);
+        will-change: transform;
+    }
+    .stButton > button:active,
+    .stFormSubmitButton > button:active {
+        transform: scale(0.97);
+    }
+
+    /* Hover only where a real pointer exists. On touch, hover fires on tap and
+       leaves the element stuck in its hover state after the user is done. */
+    @media (hover: hover) and (pointer: fine) {
+        .stButton > button:hover,
+        .stFormSubmitButton > button:hover {
+            transform: translateY(-1px);
+        }
+    }
+
+    /* Streamlit ships a weak default focus ring. Keyboard users need this to be
+       unmistakably visible, so it is drawn on the element's own accent. */
+    .stButton > button:focus-visible,
+    .stFormSubmitButton > button:focus-visible,
+    .stTextInput input:focus-visible,
+    .stSelectbox [data-baseweb="select"] > div:focus-within,
+    .stTextArea textarea:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+    }
+
+    /* ---- sidebar -------------------------------------------------------- */
+    section[data-testid="stSidebar"] {
+        border-right: 1px solid var(--border-color);
+    }
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: var(--cs-space-6);
+    }
+
+    /* ---- tabs ----------------------------------------------------------- */
+    /* The active tab is identified by an underline, not by a colour shift
+       alone, so the current selection survives greyscale and colour blindness. */
+    .stTabs [data-baseweb="tab-highlight"] {
+        background-color: var(--primary-color);
+    }
+    .stTabs [data-baseweb="tab"] {
+        transition: color var(--cs-base) var(--cs-ease-out),
+                    background-color var(--cs-base) var(--cs-ease-out);
+        padding-top: var(--cs-space-2);
+        padding-bottom: var(--cs-space-2);
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        font-weight: 600;
+    }
+
+    /* ---- metrics -------------------------------------------------------- */
+    /* Streamlit draws a hairline above each metric. Removing it and using space
+       instead stops the row reading as a table. */
+    [data-testid="stMetric"] {
+        border: none;
+        border-top: 2px solid var(--border-color);
+        padding-top: var(--cs-space-3);
+        background: transparent;
+    }
+    [data-testid="stMetricLabel"] p {
         font-size: 0.8rem;
-        display: inline-block;
+        letter-spacing: 0.01em;
+        color: var(--text-color);
+        opacity: 0.62;
+    }
+    [data-testid="stMetricValue"] {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+    }
+
+    /* ---- expanders ------------------------------------------------------ */
+    [data-testid="stExpander"] details {
+        transition: background-color var(--cs-base) var(--cs-ease-out);
+    }
+    [data-testid="stExpander"] summary {
+        transition: color var(--cs-fast) var(--cs-ease-out);
+    }
+
+    /* ---- app components (defined below in render helpers) --------------- */
+    /* A sense chip. Rank 1 is filled with the accent because selection is the
+       one thing this UI must make instantly scannable. */
+    .sense-chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.4rem;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 500;
+        line-height: 1.5;
+        border: 1px solid var(--border-color);
+        background: var(--secondary-background-color);
+        color: var(--text-color);
+        white-space: nowrap;
+    }
+    .sense-chip[data-selected="true"] {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+        color: #ffffff;
+    }
+    /* Dark themes need light ink on the light-ish accent chip, not white. */
+    [data-theme="dark"] .sense-chip[data-selected="true"] {
+        color: #0d1116;
+    }
+    .sense-chip .score {
+        font-variant-numeric: tabular-nums;
+        opacity: 0.7;
+        font-weight: 400;
+    }
+    [data-theme="dark"] .sense-chip[data-selected="true"] .score {
+        opacity: 0.75;
+    }
+
+    /* The prediction panel. A full border plus a tinted fill -- deliberately no
+       coloured side stripe, which reads as a template rather than a design. */
+    .prediction-panel {
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        background: var(--secondary-background-color);
+        padding: var(--cs-space-4) var(--cs-space-6);
+        margin-bottom: var(--cs-space-4);
+    }
+    .prediction-panel .label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.55;
+        margin-bottom: var(--cs-space-1);
+    }
+    .prediction-panel .synset {
+        font-size: 1.5rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        line-height: 1.25;
+    }
+    .prediction-panel .gloss {
+        margin-top: var(--cs-space-2);
+        max-width: 68ch;
+    }
+
+    /* Reduced motion: keep the colour transitions that aid comprehension, drop
+       everything that moves. Not optional -- vestibular triggers are real. */
+    @media (prefers-reduced-motion: reduce) {
+        .stButton > button,
+        .stFormSubmitButton > button,
+        .stTabs [data-baseweb="tab"],
+        [data-testid="stExpander"] details,
+        [data-testid="stExpander"] summary {
+            transition-duration: 1ms !important;
+        }
+        .stButton > button:hover,
+        .stFormSubmitButton > button:hover,
+        .stButton > button:active,
+        .stFormSubmitButton > button:active {
+            transform: none !important;
+        }
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ---------------------------------------------------------------------------
-# Sidebar
-# ---------------------------------------------------------------------------
-
-with st.sidebar:
-    st.title("🧠 ContextSense AI")
-    st.markdown("### Word Sense Disambiguation")
-    st.markdown(
-        "Combine WordNet lexical knowledge with embedding-based "
-        "semantic similarity to disambiguate word meanings."
-    )
-
-    st.divider()
-
-    st.subheader("⚙️ Resources")
-
-    st.info(
-        "Required:\n"
-        "- NLTK WordNet (downloads automatically)\n\n"
-        "Optional:\n"
-        "- Sentence Transformers model (auto-downloads on first use)\n"
-        "- Word2Vec Google News model (manual download, ~3.6GB)"
-    )
-
-    if st.button("🔄 Download NLTK Resources", type="primary"):
-        from contextsense_ai.utils.resource_manager import ensure_nltk_resources
-
-        with st.spinner("Downloading resources..."):
-            ok = ensure_nltk_resources()
-        if ok:
-            st.success("NLTK resources ready!")
-        else:
-            st.error("Failed to download. Check your internet connection.")
-
-    st.divider()
-    st.caption("ContextSense AI v0.1.0")
-    st.caption("An educational WSD system for NLP students and researchers.")
 
 # ---------------------------------------------------------------------------
 # Helper: get or load backend
 # ---------------------------------------------------------------------------
+
+
+def _word2vec_installed() -> bool:
+    """Whether a Word2Vec vectors file is present in the model directory.
+
+    Checked on disk rather than via ``is_model_available``, which only reports a
+    *loaded* model. The sidebar needs to know what is installed, before anything
+    has tried to load it.
+    """
+    return any((settings.data_dir / "word2vec").glob("*.bin*"))
 
 
 def get_backend(backend_name: str) -> EmbeddingBackend | None:
@@ -166,21 +313,281 @@ def get_backend(backend_name: str) -> EmbeddingBackend | None:
     return cast("EmbeddingBackend | None", st.session_state.model_backends[backend_name])
 
 
-def ensure_backend_loaded(backend_name: str) -> bool:
-    """Load a backend if needed."""
+def ensure_backend_loaded(backend_name: str) -> str | None:
+    """Load a backend if needed.
+
+    Returns None on success, or a message explaining the failure. It does not
+    render: every caller reports the error with its own context, and rendering
+    here too produced two stacked error banners for one failure.
+    """
     backend = get_backend(backend_name)
     if backend is None:
-        return False
-    if not st.session_state.backend_loaded.get(backend_name, False):
-        try:
-            backend.load()
-            st.session_state.backend_loaded[backend_name] = True
-            return True
-        except Exception as exc:
-            st.error(f"Failed to load {backend_name}: {exc}")
-            return False
-    return True
+        return f"Unknown embedding backend '{backend_name}'."
+    if st.session_state.backend_loaded.get(backend_name, False):
+        return None
+    try:
+        backend.load()
+        st.session_state.backend_loaded[backend_name] = True
+        return None
+    except Exception as exc:
+        return str(exc)
 
+
+def pick_occurrence(sentence: str, target_word: str, *, key: str) -> int | None:
+    """Ask which occurrence of ``target_word`` to disambiguate.
+
+    Returns the 0-based index, or None when there is nothing to disambiguate.
+    Shared by the Playground and Comparison pages so both resolve multi-word
+    sentences identically; Comparison used to hardcode occurrence 0 and quietly
+    scored the wrong token.
+
+    Call this outside a ``st.form``: inside one the widget list is frozen until
+    submit, so the options would be computed from the last submitted sentence.
+    """
+    if not sentence or not target_word:
+        return None
+
+    from contextsense_ai.preprocessing import (
+        find_target_occurrences,
+        preprocess_for_target_lookup,
+    )
+
+    try:
+        occurrences = find_target_occurrences(preprocess_for_target_lookup(sentence), target_word)
+    except Exception as exc:
+        st.error(f"Error analyzing sentence: {exc}")
+        return None
+
+    if not occurrences:
+        st.warning(f"'{target_word}' not found in sentence.")
+        return None
+
+    labels = [f"Occurrence {i + 1} (position {pos})" for i, pos in enumerate(occurrences)]
+    return int(
+        st.selectbox(
+            "Which occurrence?",
+            options=list(range(len(labels))),
+            format_func=labels.__getitem__,
+            index=0,
+            key=key,
+        )
+    )
+
+
+def backend_for_variant(variant: ModelVariant) -> tuple[str, EmbeddingBackend | None]:
+    """Return the backend name a variant requires, and the backend if available.
+
+    The variant alone decides the model. Deriving it from a separate control let
+    the UI label a run "Word2Vec + WordNet" while computing Sentence Transformer
+    vectors, because ``disambiguate`` only checks that a backend was supplied.
+    """
+    if variant is ModelVariant.WORD2VEC_WORDNET:
+        name = "word2vec"
+    elif variant is ModelVariant.SENTENCE_TRANSFORMER_WORDNET:
+        name = "sentence_transformer"
+    else:
+        return "", None
+    return name, get_backend(name)
+
+
+def render_prediction_panel(prediction: PredictionResult) -> None:
+    """Render the headline prediction as a single panel.
+
+    The answer is the reason the user opened the app, so it gets one
+    unambiguous block rather than being spread across three metric tiles. The
+    ranked candidates stay in a table below, where the full data lives.
+    """
+    score = prediction.top_similarity_score
+    st.markdown(
+        f"""
+        <div class="prediction-panel">
+          <div class="label">Selected sense</div>
+          <div class="synset">{prediction.predicted_synset_id}</div>
+          <div class="gloss">{prediction.predicted_definition}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    stat1, stat2, stat3 = st.columns(3)
+    stat1.metric("Similarity", "n/a" if score is None else f"{score:.4f}")
+    stat2.metric("Candidates considered", len(prediction.candidates))
+    stat3.metric("Context tokens", len(prediction.context))
+
+    st.caption(
+        "A similarity score measures how closely the context and the sense "
+        "description align in vector space. It is not a probability, and it is "
+        "not a confidence that the prediction is correct."
+    )
+
+
+def render_sense_chips(candidates: list[object], limit: int = 6) -> None:
+    """Render candidate senses as chips, filling the one that won.
+
+    Rank 1 is the answer, so it is the only chip carrying the accent fill; the
+    rest stay quiet. That makes the selection scannable at a glance without
+    having to read the numbers.
+    """
+    if not candidates:
+        return
+
+    chips = "".join(
+        # Lowercase literal, not str(bool): HTML attribute matching is
+        # case-sensitive, so data-selected="True" misses the "true" selector
+        # and the winning chip silently loses its accent fill.
+        f'<span class="sense-chip" data-selected="{"true" if c.rank == 1 else "false"}">'
+        f"{c.synset_id}"
+        f'<span class="score">{c.similarity_score:.3f}</span>'
+        f"</span>"
+        for c in candidates[:limit]
+    )
+    remaining = len(candidates) - min(limit, len(candidates))
+    suffix = f'<span class="sense-chip">+{remaining} more</span>' if remaining > 0 else ""
+    st.markdown(f"{chips}{suffix}", unsafe_allow_html=True)
+
+
+def render_evaluation(result: object, *, download_key: str) -> None:
+    """Render metrics and per-example predictions for an EvaluationResult.
+
+    Shared by the sample and upload tabs. The upload tab previously wrote its
+    results and rendered nothing, so a completed run showed an empty page.
+    """
+    st.divider()
+    metrics_tab, details_tab = st.tabs(["Metrics", "Prediction Details"])
+
+    with metrics_tab:
+        st.subheader("Model Performance")
+        for variant, metrics in result.per_model_results.items():  # type: ignore[attr-defined]
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Accuracy", f"{metrics.accuracy:.2%}")
+            col2.metric("Precision (macro)", f"{metrics.precision_macro:.3f}")
+            col3.metric("Recall (macro)", f"{metrics.recall_macro:.3f}")
+            col4.metric("F1 (macro)", f"{metrics.f1_macro:.3f}")
+
+            st.divider()
+            st.markdown(f"**{variant.display_name}**")
+            st.write(f"Evaluated: {metrics.examples_evaluated} examples")
+            st.write(f"Skipped: {metrics.examples_skipped} examples")
+            st.write(f"Invalid: {metrics.examples_invalid} examples")
+
+            if metrics.per_class_metrics:
+                st.markdown("**Per-sense performance:**")
+                for synset, perf in metrics.per_class_metrics.items():
+                    st.markdown(
+                        f"- {synset}: P={perf['precision']:.2f}, "
+                        f"R={perf['recall']:.2f}, F1={perf['f1']:.2f}, "
+                        f"n={perf['support']}"
+                    )
+
+    with details_tab:
+        st.subheader("Prediction Details")
+        predictions = result.predictions  # type: ignore[attr-defined]
+        if not predictions:
+            st.info("No predictions to show.")
+            return
+
+        import pandas as pd
+
+        gold_by_id = {ex.id: ex.gold_synset for ex in result.examples}  # type: ignore[attr-defined]
+        rows = []
+        for ex_id, pred in predictions.items():
+            score = pred.top_similarity_score
+            rows.append(
+                {
+                    "ID": ex_id,
+                    "Sentence": pred.sentence,
+                    "Target": pred.target_word,
+                    "Gold": gold_by_id.get(ex_id, ""),
+                    "Predicted": pred.predicted_synset_id,
+                    "Correct?": (
+                        "✓ Yes"
+                        if pred.success and gold_by_id.get(ex_id) == pred.predicted_synset_id
+                        else ("✗ No" if pred.success else "n/a")
+                    ),
+                    # 0.0 is a real score; a truthiness test reported "N/A" for it.
+                    "Score": f"{score:.4f}" if score is not None else "N/A",
+                    "Success": "✓" if pred.success else "✗",
+                }
+            )
+
+        df = pd.DataFrame(rows)
+        st.dataframe(df, hide_index=True, width="stretch")
+        st.download_button(
+            "📥 Download predictions as CSV",
+            df.to_csv(index=False).encode("utf-8"),
+            "contextsense_predictions.csv",
+            "text/csv",
+            key=download_key,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+# Rendered after the helpers, because it calls get_backend()/_word2vec_installed()
+# to report live model availability.
+
+with st.sidebar:
+    st.title("🧠 ContextSense AI")
+    st.markdown("### Word Sense Disambiguation")
+    st.markdown(
+        "Combine WordNet lexical knowledge with embedding-based "
+        "semantic similarity to disambiguate word meanings."
+    )
+
+    st.divider()
+
+    st.subheader("⚙️ Models")
+
+    # Show live availability rather than a static list of what exists in theory.
+    # A page that quietly omits a method is exactly the failure this panel
+    # exists to prevent, so it has to be the place that explains the omission.
+    for name, label in (
+        ("sentence_transformer", "Sentence Transformers"),
+        ("word2vec", "Word2Vec (Google News)"),
+    ):
+        backend = get_backend(name)
+        info = backend.model_info if backend else None
+        ready = bool(info and info.is_available)
+        if ready:
+            status = "ready"
+        elif name == "sentence_transformer":
+            status = "downloads on first use"
+        else:
+            status = "not installed"
+        st.markdown(f"{'✅' if ready else '⬜️'} **{label}** — {status}")
+
+    if not _word2vec_installed():
+        with st.expander("Install the Word2Vec model (~3.6 GB)"):
+            st.markdown(
+                "It is optional. The Sentence Transformers backend covers the "
+                "same comparison and downloads itself automatically."
+            )
+            st.code(
+                f"# Download from:\n{settings.word2vec_model_url}\n\n"
+                f"# Then place the file in:\n{settings.data_dir / 'word2vec'}\n\n"
+                "# Any .bin or .bin.gz name works; gensim reads gzip\n"
+                "# transparently. Restart the app once it is in place."
+            )
+
+    st.divider()
+    st.subheader("📦 Data")
+
+    st.info("NLTK WordNet downloads automatically.")
+
+    if st.button("🔄 Download NLTK Resources", type="primary"):
+        from contextsense_ai.utils.resource_manager import ensure_nltk_resources
+
+        with st.spinner("Downloading resources..."):
+            ok = ensure_nltk_resources()
+        if ok:
+            st.success("NLTK resources ready!")
+        else:
+            st.error("Failed to download. Check your internet connection.")
+
+    st.divider()
+    st.caption("ContextSense AI v0.1.0")
+    st.caption("An educational WSD system for NLP students and researchers.")
 
 # ---------------------------------------------------------------------------
 # Navigation
@@ -225,63 +632,37 @@ if pages[page] == "playground":
         )
 
     # Input form
+    # Sentence, target and the occurrence picker sit outside the form so they
+    # rerun on every keystroke. Inside a form the widget list is frozen until
+    # submit, so the occurrence options lagged one edit behind the sentence.
+    st.subheader("Input")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        # Seeded from session state so the example buttons can drive the form.
+        # Streamlit pins a widget once it owns `key`, so these must not also
+        # pass `value`.
+        sentence = st.text_area(
+            "Sentence",
+            key="sentence_input",
+            height=100,
+            help="Enter a sentence containing the ambiguous word.",
+        )
+    with col2:
+        target_word = st.text_input(
+            "Target word",
+            key="target_input",
+            help="The ambiguous word to disambiguate.",
+        )
+
+    occurrence_idx = pick_occurrence(sentence, target_word, key="playground_occurrence")
+
+    st.divider()
+
     with st.form("wsd_form"):
-        st.subheader("Input")
-
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            # Seeded from session state so the example buttons can drive the
-            # form. Streamlit pins a widget once it owns `key`, so these must
-            # not also pass `value`.
-            sentence = st.text_area(
-                "Sentence",
-                key="sentence_input",
-                height=100,
-                help="Enter a sentence containing the ambiguous word.",
-            )
-        with col2:
-            target_word = st.text_input(
-                "Target word",
-                key="target_input",
-                help="The ambiguous word to disambiguate.",
-            )
-
-        st.divider()
-
-        occ_options = []
-        if sentence and target_word:
-            from contextsense_ai.preprocessing import (
-                find_target_occurrences,
-                preprocess_for_target_lookup,
-            )
-
-            try:
-                preprocessed = preprocess_for_target_lookup(sentence)
-                occurrences = find_target_occurrences(preprocessed, target_word)
-                if occurrences:
-                    occ_options = [
-                        f"Occurrence {i + 1} (position {pos})" for i, pos in enumerate(occurrences)
-                    ]
-                else:
-                    st.warning(f"'{target_word}' not found in sentence.")
-            except Exception as exc:
-                st.error(f"Error analyzing sentence: {exc}")
-
-        if occ_options:
-            occurrence_idx = st.selectbox(
-                "Which occurrence?",
-                options=list(range(len(occ_options))),
-                format_func=lambda i: occ_options[i],
-                index=0,
-            )
-        else:
-            occurrence_idx = 0
-
-        st.divider()
-
         col_model, col_context = st.columns(2)
-        # Set from the checkbox above; read by the submit handler below.
-        backend_name: str | None = None
+        # Resolved from the variant inside the form; read by the handler below.
+        backend_name = ""
 
         with col_model:
             st.subheader("Model")
@@ -292,36 +673,26 @@ if pages[page] == "playground":
                 # Streamlit wants the positional index, not the option value.
                 index=list(ModelVariant).index(ModelVariant.SENTENCE_TRANSFORMER_WORDNET),
             )
-            if model_variant is None:  # Streamlit types the return as Optional
-                st.stop()
 
-            if model_variant.requires_embedding:
-                backend_name = (
-                    "word2vec"
-                    if st.checkbox("Use Word2Vec instead (requires manual download)", value=False)
-                    else "sentence_transformer"
+            backend_name, backend = backend_for_variant(model_variant)
+            if backend is not None:
+                info = backend.model_info
+                st.markdown(
+                    f"**Model:** {info.name}\n"
+                    f"**Status:** {info.status_text}\n"
+                    f"**Dimensions:** {info.dimensions or '?'}D",
                 )
-
-                backend = get_backend(backend_name)
-                if backend:
-                    info = backend.model_info
-                    status_color = "green" if info.is_available else "orange"
-                    st.markdown(
-                        f"**Model:** {info.name}\n"
-                        f"**Status:** {info.status_text}\n"
-                        f"**Dimensions:** {info.dimensions or '?'}D",
-                    )
-                    if not info.is_available and backend_name == "word2vec":
-                        with st.expander("How to download Word2Vec model"):
-                            st.code(
-                                f"""# Download manually from:
+                if not info.is_available and backend_name == "word2vec":
+                    with st.expander("How to download Word2Vec model"):
+                        st.code(
+                            f"""# Download manually from:
 {settings.word2vec_model_url}
 
 # Then place in:
 {settings.data_dir / "word2vec" / settings.default_word2vec_model}
 
 # Or use Sentence Transformers (default, auto-downloads)."""
-                            )
+                        )
             else:
                 st.info("This is a baseline method that does not use embeddings.")
 
@@ -333,8 +704,6 @@ if pages[page] == "playground":
                 format_func=lambda s: s.value.replace("_", " ").title(),
                 horizontal=True,
             )
-            if context_strategy is None:  # Streamlit types the return as Optional
-                st.stop()
 
             if context_strategy == ContextStrategy.LOCAL_WINDOW:
                 window = st.slider(
@@ -369,6 +738,10 @@ if pages[page] == "playground":
         cleared = st.form_submit_button("🗑️ Clear")
 
     if cleared:
+        # Dropping the keys (rather than assigning) is what actually resets the
+        # widgets; assigning to a key Streamlit already owns raises.
+        for widget_key in ("sentence_input", "target_input", "playground_occurrence"):
+            st.session_state.pop(widget_key, None)
         st.session_state.prediction = None
         st.rerun()
 
@@ -418,17 +791,21 @@ if pages[page] == "playground":
             st.error("Please enter a sentence.")
         elif not target_word.strip():
             st.error("Please enter a target word.")
+        elif occurrence_idx is None:
+            st.error(f"Could not locate '{target_word}' in the sentence.")
         else:
             with st.spinner("Running disambiguation..."):
                 try:
                     embedding_backend = get_backend(backend_name) if backend_name else None
 
-                    if embedding_backend and not ensure_backend_loaded(backend_name):
-                        st.error(
-                            "Embedding model not available. "
-                            "Check the sidebar for setup instructions."
-                        )
-                        st.stop()
+                    if embedding_backend:
+                        load_error = ensure_backend_loaded(backend_name)
+                        if load_error:
+                            st.error(
+                                "Embedding model not available. "
+                                f"Check the sidebar for setup instructions. ({load_error})"
+                            )
+                            st.stop()
 
                     playground_result = disambiguate(
                         sentence=sentence,
@@ -465,22 +842,9 @@ if pages[page] == "playground":
         if not prediction.success:
             st.warning(f"Could not disambiguate: {prediction.error_message or 'unknown error'}")
         else:
-            top = prediction.ranked_candidates[0] if prediction.ranked_candidates else None
+            render_prediction_panel(prediction)
 
-            head1, head2, head3 = st.columns(3)
-            with head1:
-                st.metric("Predicted sense", prediction.predicted_synset_id)
-            with head2:
-                score = prediction.top_similarity_score
-                st.metric("Similarity", "n/a" if score is None else f"{score:.4f}")
-            with head3:
-                st.metric("Candidates considered", len(prediction.candidates))
-
-            if top is not None:
-                st.markdown(
-                    f"**{prediction.predicted_synset_id}** — {top.definition}",
-                    help="Similarity scores are not probabilities.",
-                )
+            render_sense_chips(prediction.ranked_candidates)
 
             with st.expander("Context used", expanded=False):
                 if prediction.context:
@@ -522,127 +886,172 @@ elif pages[page] == "comparison":
     st.title("📊 Model Comparison")
     st.markdown("Run the same input through multiple WSD methods and compare their predictions.")
 
-    with st.form("comparison_form"):
-        sentence = st.text_area(
-            "Sentence",
-            value="The bank approved the loan application.",
-            height=80,
-        )
-        target_word = st.text_input("Target word", value="bank")
+    # Outside the form so the occurrence options track the sentence as typed.
+    sentence = st.text_area(
+        "Sentence",
+        value="The bank approved the loan application.",
+        height=80,
+        key="comparison_sentence",
+    )
+    target_word = st.text_input("Target word", value="bank", key="comparison_target")
+    occurrence_idx = pick_occurrence(sentence, target_word, key="comparison_occurrence")
 
-        submitted = st.form_submit_button("🔍 Compare Models", type="primary")
+    submitted = st.button("🔍 Compare Models", type="primary")
 
-    results: dict[ModelVariant, PredictionResult | None] = {}
-
-    if submitted and sentence and target_word:
-        from contextsense_ai.preprocessing import (
-            find_target_occurrences,
-            preprocess_for_target_lookup,
-        )
-
-        try:
-            preprocessed = preprocess_for_target_lookup(sentence)
-            occurrences = find_target_occurrences(preprocessed, target_word)
-            if not occurrences:
-                st.error(f"'{target_word}' not found in sentence.")
-                st.stop()
-            occurrence_idx = 0
-        except Exception as exc:
-            st.error(f"Error: {exc}")
-            st.stop()
-
+    if submitted and sentence and target_word and occurrence_idx is not None:
         with st.spinner("Loading models and running comparison..."):
-            try:
-                backend = SentenceTransformerBackend()
-                ensure_backend_loaded("sentence_transformer")
-                emb_backend = get_backend("sentence_transformer")
+            results: dict[ModelVariant, PredictionResult] = {}
+            # (method, one-line reason, long detail or None). The page must say
+            # which methods did not run -- silently dropping one is how a
+            # three-model comparison reads as a four-model one -- but the detail
+            # belongs collapsed, not as a wall of text across the page.
+            skipped: list[tuple[str, str, str | None]] = []
 
-                if emb_backend and not state["backend_loaded"].get("sentence_transformer", False):
-                    emb_backend.load()
-                    state["backend_loaded"]["sentence_transformer"] = True
+            for variant in ModelVariant:
+                required_name, emb_backend = backend_for_variant(variant)
+                if variant.requires_embedding:
+                    if emb_backend is None:
+                        skipped.append((variant.display_name, "no backend available", None))
+                        continue
+                    load_error = ensure_backend_loaded(required_name)
+                    if load_error:
+                        # Ask the filesystem rather than pattern-matching the
+                        # exception text: "not installed" is a normal state with
+                        # a known fix, whereas a load failure is a real problem
+                        # whose detail the user needs to see.
+                        absent = required_name == "word2vec" and not _word2vec_installed()
+                        skipped.append(
+                            (
+                                variant.display_name,
+                                "model not installed" if absent else "could not load model",
+                                None if absent else load_error,
+                            )
+                        )
+                        continue
 
-                if emb_backend:
-                    ctx_extractor = ContextExtractor(context_window=5)
-                    context_tokens = ctx_extractor.extract(
-                        sentence,
-                        target_word,
-                        occurrence_idx,
-                        strategy=ContextStrategy.LOCAL_WINDOW,
+                try:
+                    # Baselines ignore the context strategy entirely, so passing
+                    # it uniformly keeps the comparison honest about what each
+                    # method actually consumed.
+                    results[variant] = disambiguate(
+                        sentence=sentence,
+                        target_word=target_word,
+                        occurrence_index=occurrence_idx,
+                        model_variant=variant,
+                        embedding_backend=emb_backend if variant.requires_embedding else None,
+                        context_strategy=ContextStrategy.LOCAL_WINDOW,
+                    )
+                except Exception as exc:
+                    results[variant] = PredictionResult(
+                        sentence=sentence,
+                        target_word=target_word,
+                        selected_occurrence=occurrence_idx,
+                        context=[],
+                        context_strategy=ContextStrategy.LOCAL_WINDOW,
+                        model_variant=variant,
+                        embedding_model_name=None,
+                        candidates=[],
+                        ranked_candidates=[],
+                        predicted_synset_id="",
+                        predicted_definition="",
+                        top_similarity_score=None,
+                        success=False,
+                        error_message=str(exc),
                     )
 
-                    for variant in ModelVariant:
-                        if variant.requires_embedding:
-                            try:
-                                pred = disambiguate(
-                                    sentence=sentence,
-                                    target_word=target_word,
-                                    occurrence_index=occurrence_idx,
-                                    model_variant=variant,
-                                    embedding_backend=emb_backend,
-                                    context_strategy=ContextStrategy.LOCAL_WINDOW,
-                                )
-                                results[variant] = pred
-                            except Exception:
-                                results[variant] = None
-                        else:
-                            pred = disambiguate(
-                                sentence=sentence,
-                                target_word=target_word,
-                                occurrence_index=occurrence_idx,
-                                model_variant=variant,
-                                embedding_backend=None,
-                                context_strategy=ContextStrategy.FULL_SENTENCE,
-                            )
-                            results[variant] = pred
+            if not results:
+                st.error("No model variant could be evaluated.")
+                st.stop()
 
-                    st.session_state.comparison_results = results
+            st.session_state.comparison_results = results
+            st.session_state.comparison_skipped = skipped
 
-            except Exception as exc:
-                st.error(f"Comparison failed: {exc}")
-
-        if st.session_state.get("comparison_results"):
-            results = st.session_state.comparison_results
+    # Rendered outside the submit branch so results survive reruns. This used to
+    # sit inside it, so the table vanished on any later interaction.
+    results = st.session_state.get("comparison_results")
+    if results:
+        skipped = st.session_state.get("comparison_skipped") or []
+        if skipped:
+            # One compact line per method. The instructions for getting the model
+            # installed already live in the sidebar, so repeating them across the
+            # page is noise; the raw error only appears when it is something other
+            # than a plain "not installed".
+            names = ", ".join(f"{name} ({reason})" for name, reason, _ in skipped)
+            st.info(f"Ran {len(results)} of the available methods. Not evaluated: {names}.")
+            details = [(name, detail) for name, _, detail in skipped if detail]
+            if details:
+                with st.expander("Why a method could not load"):
+                    for name, detail in details:
+                        st.markdown(f"**{name}** — {detail}")
+            else:
+                st.caption(
+                    "See the sidebar for setup instructions. The Sentence "
+                    "Transformers backend downloads automatically and needs no "
+                    "manual step."
+                )
         st.divider()
 
+        successful = {v: p for v, p in results.items() if p.success}
+
+        # The side-by-side table is the point of this page, so it leads. Four
+        # stacked expanders each restating their own answer hid the only thing
+        # the user came here to see: where the models differ.
+        if successful:
+            st.dataframe(
+                [
+                    {
+                        "Method": variant.display_name,
+                        "Predicted sense": p.predicted_synset_id,
+                        "Similarity": (
+                            "n/a"
+                            if p.top_similarity_score is None
+                            else round(p.top_similarity_score, 4)
+                        ),
+                        "Definition": p.predicted_definition,
+                    }
+                    for variant, p in successful.items()
+                ],
+                width="stretch",
+                hide_index=True,
+            )
+
+            distinct = {p.predicted_synset_id for p in successful.values()}
+            stat1, stat2 = st.columns(2)
+            stat1.metric("Methods run", len(successful))
+            stat2.metric("Distinct answers", len(distinct))
+            if len(distinct) == 1:
+                st.info(
+                    "Every method returned the same sense here. Agreement is not "
+                    "evidence of correctness — two methods can share a mistake."
+                )
+            elif len(distinct) < len(successful):
+                st.caption(
+                    f"{len(successful) - len(distinct)} method(s) matched the "
+                    "majority answer. Expand any method below for its ranking."
+                )
+
+        st.subheader("Per-method detail")
         for variant, entry in results.items():
-            if entry is None:
-                continue
-            with st.expander(
-                f"{variant.display_name}",
-                expanded=(variant == ModelVariant.SENTENCE_TRANSFORMER_WORDNET),
-            ):
+            with st.expander(f"{variant.display_name}"):
                 if entry.success:
-                    st.markdown(f"**Predicted:** {entry.predicted_synset}")
-                    st.markdown(f"**Definition:** {entry.predicted_definition}")
-                    if entry.top_similarity_score is not None:
-                        st.metric("Similarity score", f"{entry.top_similarity_score:.4f}")
+                    render_sense_chips(entry.ranked_candidates)
                     if entry.ranked_candidates:
-                        st.markdown("**Ranked candidates:**")
-                        for c in entry.ranked_candidates[:5]:
-                            st.markdown(
-                                f"- Rank {c.rank}: {c.synset_id} — {c.definition[:80]}... "
-                                f"(score: {c.similarity_score:.4f})"
-                            )
+                        st.dataframe(
+                            [
+                                {
+                                    "rank": c.rank,
+                                    "synset": c.synset_id,
+                                    "pos": c.pos,
+                                    "score": round(c.similarity_score, 4),
+                                    "definition": c.definition,
+                                }
+                                for c in entry.ranked_candidates
+                            ],
+                            width="stretch",
+                            hide_index=True,
+                        )
                 else:
                     st.error(f"Failed: {entry.error_message}")
-
-        # Agreement analysis
-        st.divider()
-        st.subheader("Agreement Analysis")
-        successful_preds = {v: p for v, p in results.items() if p is not None and p.success}
-        if len(successful_preds) >= 2:
-            synsets = [p.predicted_synset_id for p in successful_preds.values()]
-            unique = set(synsets)
-            agreement_pct = (
-                max(sum(1 for s in synsets if s == u) for u in unique) / len(synsets)
-            ) * 100
-            st.metric("Model agreement", f"{agreement_pct:.1f}%")
-            st.info(
-                "Agreement between models does not guarantee correctness. "
-                "Different methods may make the same error for different reasons."
-            )
-        else:
-            st.warning("Not enough successful predictions to compare.")
 
 elif pages[page] == "evaluation":
     st.title("📈 Dataset Evaluation")
@@ -665,9 +1074,9 @@ elif pages[page] == "evaluation":
         if st.button("Run Evaluation on Sample", type="primary"):
             with st.spinner("Loading model and evaluating..."):
                 try:
-                    backend = SentenceTransformerBackend()
-                    if not ensure_backend_loaded("sentence_transformer"):
-                        st.error("Sentence Transformer model not available.")
+                    load_error = ensure_backend_loaded("sentence_transformer")
+                    if load_error:
+                        st.error(f"Sentence Transformer model not available: {load_error}")
                         st.stop()
 
                     emb_backend = get_backend("sentence_transformer")
@@ -695,82 +1104,9 @@ elif pages[page] == "evaluation":
                 except Exception as exc:
                     st.error(f"Evaluation failed: {exc}")
 
-        if st.session_state.get("evaluation_results"):
-            eval_result = st.session_state.evaluation_results
-            st.divider()
-
-            metrics_tab, details_tab = st.tabs(["Metrics", "Prediction Details"])
-
-            with metrics_tab:
-                st.subheader("Model Performance")
-                for variant, metrics in eval_result.per_model_results.items():
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Accuracy", f"{metrics.accuracy:.2%}")
-                    with col2:
-                        st.metric("Precision (macro)", f"{metrics.precision_macro:.3f}")
-                    with col3:
-                        st.metric("Recall (macro)", f"{metrics.recall_macro:.3f}")
-                    with col4:
-                        st.metric("F1 (macro)", f"{metrics.f1_macro:.3f}")
-
-                    st.divider()
-                    st.markdown(f"**{variant.display_name}**")
-                    st.write(f"Evaluated: {metrics.examples_evaluated} examples")
-                    st.write(f"Skipped: {metrics.examples_skipped} examples")
-                    st.write(f"Invalid: {metrics.examples_invalid} examples")
-
-                    if metrics.per_class_metrics:
-                        st.markdown("**Per-sense performance:**")
-                        for synset, perf in metrics.per_class_metrics.items():
-                            st.markdown(
-                                f"- {synset}: P={perf['precision']:.2f}, "
-                                f"R={perf['recall']:.2f}, F1={perf['f1']:.2f}, "
-                                f"n={perf['support']}"
-                            )
-
-            with details_tab:
-                st.subheader("Prediction Details")
-                if eval_result.predictions:
-                    import pandas as pd
-
-                    rows = []
-                    for ex_id, pred in eval_result.predictions.items():
-                        row = {
-                            "ID": ex_id,
-                            "Sentence": pred.sentence if pred else "",
-                            "Target": pred.target_word if pred else "",
-                            "Gold": "",
-                            "Predicted": pred.predicted_synset_id if pred else "",
-                            "Correct?": "",
-                            "Score": f"{pred.top_similarity_score:.4f}"
-                            if pred and pred.top_similarity_score
-                            else "N/A",
-                            "Success": "✓" if pred and pred.success else "✗" if pred else "N/A",
-                        }
-                        for ex in eval_result.examples:
-                            if ex.id == ex_id:
-                                row["Gold"] = ex.gold_synset
-                                if pred and pred.success:
-                                    row["Correct?"] = (
-                                        "✓ Yes"
-                                        if ex.gold_synset == pred.predicted_synset_id
-                                        else "✗ No"
-                                    )
-                                break
-                        rows.append(row)
-
-                    df = pd.DataFrame(rows)
-                    st.dataframe(df, hide_index=True, use_container_width=True)
-
-                    csv = df.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        "📥 Download predictions as CSV",
-                        csv,
-                        "contextsense_predictions.csv",
-                        "text/csv",
-                        key="download_pred_csv",
-                    )
+        sample_result = st.session_state.get("evaluation_results")
+        if sample_result:
+            render_evaluation(sample_result, download_key="download_sample_csv")
 
     with eval_tab2:
         st.subheader("Upload Your Own Dataset")
@@ -803,9 +1139,9 @@ elif pages[page] == "evaluation":
                 if st.button("Run Evaluation on Uploaded Dataset", type="primary"):
                     with st.spinner("Evaluating..."):
                         try:
-                            backend = SentenceTransformerBackend()
-                            if not ensure_backend_loaded("sentence_transformer"):
-                                st.error("Model not available.")
+                            load_error = ensure_backend_loaded("sentence_transformer")
+                            if load_error:
+                                st.error(f"Model not available: {load_error}")
                                 st.stop()
 
                             emb_backend = get_backend("sentence_transformer")
@@ -821,13 +1157,19 @@ elif pages[page] == "evaluation":
                                 context_strategy=ContextStrategy.LOCAL_WINDOW,
                                 dataset_name=getattr(uploaded, "name", "uploaded.csv"),
                             )
-                            st.session_state.evaluation_results = result
+                            # Separate key from the sample tab: both tabs wrote
+                            # `evaluation_results`, so running an upload silently
+                            # replaced the sample metrics shown in the other tab.
+                            st.session_state.uploaded_evaluation_results = result
                             st.success("Evaluation complete!")
-                            st.rerun()
                         except Exception as exc:
                             st.error(f"Evaluation failed: {exc}")
             except Exception as exc:
                 st.error(f"Failed to load dataset: {exc}")
+
+        uploaded_result = st.session_state.get("uploaded_evaluation_results")
+        if uploaded_result:
+            render_evaluation(uploaded_result, download_key="download_upload_csv")
 
 elif pages[page] == "about":
     st.title("📚 About & Learn")
@@ -918,25 +1260,34 @@ elif pages[page] == "about":
         st.divider()
         st.subheader("Architecture Diagram")
 
-        st.markdown(
+        # Streamlit has no built-in Mermaid renderer, so a ```mermaid fence
+        # displayed as raw source. Plain text renders everywhere.
+        st.code(
             """
-            ```mermaid
-            flowchart LR
-                A[Input Sentence] --> B[Tokenization]
-                B --> C[Target Word Lookup]
-                C --> D[WordNet: Get Candidate Senses]
-                D --> E[Context Extraction]
-                E --> F[Embedding Model]
-                F --> G[Context Vector]
-                D --> H[ sense Description]
-                H --> F
-                F --> I[Sense Vectors]
-                G --> J[Cosine Similarity]
-                I --> J
-                J --> K[Rank Candidates]
-                K --> L[Select Top Sense]
-            ```
-            """
+  sentence
+      |
+      v
+  tokenize  ->  locate target occurrence (POS tag here too)
+      |                        |
+      |                        v
+      |               +-------------------+
+      |               | WordNet candidates|-- POS filter
+      |               +-------------------+
+      |                        |
+      |                        v
+      |                 candidate senses
+      |                        |
+      |        definition + examples + lemmas + hypernyms
+      |                        |
+      |                        v
+      |                 sense description ------------+
+      |                                                  |
+      v                                                  v
+  context tokens  (target removed, window or full) --> embedding --> cosine
+                                                             --> rank
+                                                             --> top sense
+            """.strip(),
+            language="text",
         )
 
     with about_tabs[2]:

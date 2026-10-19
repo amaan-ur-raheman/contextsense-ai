@@ -13,6 +13,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from contextsense_ai.config import settings
+from contextsense_ai.schemas import ModelVariant
 
 APP_PATH = Path(__file__).resolve().parent.parent / "app.py"
 
@@ -93,24 +94,31 @@ def test_uploaded_csv_is_loaded() -> None:
     assert "Valid: 1" in text
 
 
-def test_word2vec_toggle_is_honoured_on_submit() -> None:
-    """Checking the Word2Vec box must change the backend actually used.
+def test_model_dropdown_selects_the_matching_backend() -> None:
+    """The WSD Method dropdown must decide which backend actually runs.
 
-    The submit handler recomputed ``sentence_transformer`` unconditionally,
-    so the checkbox only ever changed the info panel. Loading Word2Vec is
-    skipped here because it needs a 1.5 GB manual download.
+    This used to be a separate "Use Word2Vec instead" checkbox, which could
+    disagree with the chosen variant: selecting "Word2Vec + WordNet" and
+    leaving the box unchecked computed Sentence Transformer vectors while the UI
+    labelled the run Word2Vec. ``disambiguate`` only checks that *some* backend
+    was supplied, so nothing downstream caught it. The variant now determines
+    the backend on its own.
+
+    Only the Word2Vec direction is exercised: it fails fast without a download,
+    whereas the Sentence Transformer path would pull the real model.
     """
     if any((settings.data_dir / "word2vec").glob("*.bin*")):
         pytest.skip("Word2Vec vectors are installed; loading them is not a test.")
 
     app = _app()
     app.run()
-    # Both deltas must land in one run: a checkbox inside st.form does not
-    # commit until submit, so an intermediate run() re-reads it as False.
-    next(c for c in app.checkbox if "Word2Vec" in c.label).check()
+    method = next(s for s in app.selectbox if s.label == "WSD Method")
+    method.set_value(ModelVariant.WORD2VEC_WORDNET)
+    # Both deltas land in one run: widgets inside st.form do not commit until
+    # submit, so an intermediate run() would re-read the dropdown as unchanged.
     next(b for b in app.button if "Disambiguate" in b.label).click().run()
 
     assert not app.exception, f"submit raised {app.exception[0].value}"
-    assert any("word2vec" in e.value for e in app.error), (
-        "submission used the sentence-transformer backend despite the checkbox"
+    assert any("Word2Vec model not found" in e.value for e in app.error), (
+        "selecting the Word2Vec variant still attempted the sentence-transformer backend"
     )
