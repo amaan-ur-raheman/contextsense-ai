@@ -139,7 +139,7 @@ See [docs/architecture.md](docs/architecture.md) for detailed module description
 
 ```
 contextsense-ai/
-├── app.py                          # Streamlit web application
+├── app.py                          # Streamlit entry point (54 lines)
 ├── pyproject.toml                  # Project configuration and dependencies
 ├── uv.lock                         # Locked dependency versions
 ├── .python-version                 # Python version pin
@@ -173,6 +173,17 @@ contextsense-ai/
 │   ├── datasets/
 │   │   ├── __init__.py
 │   │   └── semcor.py               # SemCor download and label conversion
+│   ├── ui/                         # Streamlit interface
+│   │   ├── __init__.py
+│   │   ├── theme.py                # Component stylesheet
+│   │   ├── state.py                # Session state and backend lifecycle
+│   │   ├── components.py           # Widgets shared across pages
+│   │   ├── sidebar.py              # Navigation context and model status
+│   │   └── pages/                  # One module per page
+│   │       ├── playground.py
+│   │       ├── comparison.py
+│   │       ├── evaluation.py
+│   │       └── about.py
 │   ├── scripts/
 │   │   ├── download_resources.py   # Download NLTK resources
 │   │   └── run_evaluation.py       # CLI evaluation runner
@@ -616,7 +627,7 @@ working directory.
 5. **No training**: Uses pretrained models, not task-specific training
 6. **Small demo dataset**: The bundled 8-example sample is not a benchmark; the SemCor evaluation is the benchmark, and its conversion and evaluation code ship in this project (the corpus itself is fetched on demand)
 7. **Similarity ≠ probability**: Scores indicate vector alignment, not prediction confidence
-8. **Context does not reliably beat a frequency lookup**: On the 3,000-row SemCor benchmark the embedding model scores 0.3317 against 0.3280 for the most-frequent-sense baseline — a difference that is within noise. See [docs/evaluation.md](docs/evaluation.md#measured-results).
+8. **Context does not reliably beat a frequency lookup**: On the 3,000-row SemCor benchmark the embedding model scores 0.3320 against 0.3280 for the most-frequent-sense baseline — a difference that is within noise. See [docs/evaluation.md](docs/evaluation.md#measured-results).
 
 ## Future Improvements
 

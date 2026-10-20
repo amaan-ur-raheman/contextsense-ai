@@ -201,7 +201,7 @@ retained, so it is not reported here.
 | --- | --- | --- | --- | --- |
 | WordNet first-sense | 0.3097 | 0.3038 | 0.2357 | 3000 |
 | Most-frequent-sense | **0.3280** | 0.3235 | **0.2470** | 3000 |
-| Sentence Transformers + WordNet | **0.3317** | **0.3521** | 0.2132 | 3000 |
+| Sentence Transformers + WordNet | **0.3320** | **0.3518** | 0.2141 | 3000 |
 
 Reproduce with:
 
@@ -209,6 +209,14 @@ Reproduce with:
 uv run python -m contextsense_ai.datasets.semcor --output data/datasets/semcor_brown.csv
 uv run run-evaluation --csv data/datasets/semcor_brown.csv --model all
 ```
+
+> These numbers are reproducible. They were not always: the sense description
+> was assembled from a set of lemma names, and set iteration order depends on
+> the process's hash seed, so the same rows scored differently depending on
+> which process ran — 0.3400, 0.3433 and 0.3467 on a 300-row sample, and
+> 0.3317 against 0.3320 on the full 3,000-row benchmark. The description is now
+> sorted, and repeated runs agree exactly. The earlier artifact was
+> regenerated rather than patched.
 
 ### Reading these numbers honestly
 
@@ -220,13 +228,15 @@ seen on the bundled 8-example sample is entirely explained by that difference in
 difficulty, not by any change in the system.
 
 The embedding method leads by 0.4 accuracy points over the frequency baseline,
-which is within noise on 3,000 rows, and it leads clearly on weighted F1. It
-**loses on macro F1** (0.2132 against 0.2357 and 0.2470). Macro-averaged scores
-are low across the board because the corpus contains thousands of hapax
-legomena: a sense annotated once contributes a full 0 or 1 to the macro average.
-The method concentrates probability on high-frequency senses, so it trades
-rare-sense recall for it. Any claim that this approach beats the baselines should
-carry that trade-off with it.
+which is within noise on 3,000 rows, and it leads clearly on weighted F1. A
+McNemar test on the paired per-example predictions puts the gap at p = 0.68 —
+the two methods are not distinguishable. It **loses on macro F1** (0.2141
+against 0.2357 and 0.2470). Macro-averaged scores are low across the board
+because the corpus contains thousands of hapax legomena: a sense annotated once
+contributes a full 0 or 1 to the macro average. The method concentrates
+probability on high-frequency senses, so it trades rare-sense recall for it.
+Any claim that this approach beats the baselines should carry that trade-off
+with it.
 
 Coverage is equal across variants to within one row, so these numbers are
 comparable. Check `examples_evaluated` in the exported summary before comparing

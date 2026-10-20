@@ -250,7 +250,7 @@ Models are loaded lazily on first use, not at startup. The Sentence Transformer 
 5. **No syntactic parsing**: Does not use dependency relations
 6. **Small demo dataset**: Sample examples are not a benchmark
 7. **No training**: The system uses pretrained models, not task-specific training
-8. **Context adds little over frequency**: On the 3,000-row SemCor benchmark the embedding model (0.3317) is not significantly better than the most-frequent-sense baseline (0.3280). See `docs/evaluation.md`.
+8. **Context adds little over frequency**: On the 3,000-row SemCor benchmark the embedding model (0.3320) is not significantly better than the most-frequent-sense baseline (0.3280). See `docs/evaluation.md`.
 
 ### 42. Why might Sentence Transformers fail for WSD?
 
