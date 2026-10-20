@@ -198,7 +198,13 @@ class WordNetService:
 
     def _build_candidate(self, syn: Synset, word: str) -> CandidateSense:
         """Build a CandidateSense from a WordNet synset."""
-        lemmas = list({lem.name().replace("_", " ") for lem in syn.lemmas()})
+        # Sorted, not set-ordered. A set of lemma names iterates in an order
+        # that depends on the process's string hash seed, so the same synset
+        # produced a different lemma order in every run. That text is embedded
+        # to form the sense vector, so an unstable order made the whole
+        # evaluation non-reproducible: identical inputs scored 0.3400, 0.3433
+        # or 0.3467 on the same 300 rows depending on which process ran.
+        lemmas = sorted({lem.name().replace("_", " ") for lem in syn.lemmas()})
         examples = [ex for ex in syn.examples()]
         hypernyms = self._get_related_names(syn, "hypernyms")
         hyponyms = self._get_related_names(syn, "hyponyms")
@@ -226,7 +232,10 @@ class WordNetService:
         except Exception:
             return []
         names: list[str] = []
-        for s in related[:_SENSES_PER_RELATION]:
+        # Sorted before the slice. NLTK assembles these relations from sets, so
+        # both the order and which entries survive the cut varied between
+        # processes -- the same nondeterminism the lemma list had.
+        for s in sorted(related, key=lambda x: x.name())[:_SENSES_PER_RELATION]:
             lemma_names = [lem.name().replace("_", " ") for lem in s.lemmas()]
             if lemma_names:
                 names.append(lemma_names[0])

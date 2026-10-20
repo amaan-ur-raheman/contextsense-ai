@@ -8,6 +8,38 @@ from dataclasses import dataclass
 import numpy as np
 
 from contextsense_ai.exceptions import EmbeddingError
+from contextsense_ai.schemas import ModelVariant
+
+#: Which backend each embedding-based model variant genuinely needs.
+#: ``EmbeddingModelInfo.backend`` is the key.
+VARIANT_BACKENDS: dict[ModelVariant, str] = {
+    ModelVariant.WORD2VEC_WORDNET: "word2vec",
+    ModelVariant.SENTENCE_TRANSFORMER_WORDNET: "sentence_transformers",
+}
+
+
+def backend_serves_variant(
+    backend: EmbeddingBackend | None,
+    variant: ModelVariant,
+) -> bool:
+    """Whether ``backend`` is the model that ``variant`` actually calls for.
+
+    ``disambiguate`` accepts any backend for any embedding variant, so a
+    caller that asked for the Word2Vec variant while holding a Sentence
+    Transformers backend would get Sentence Transformers results under a
+    Word2Vec label. Nothing downstream could detect it, because the results
+    are perfectly valid numbers for a different model.
+
+    This is the check that lets a caller refuse the substitution instead of
+    silently reporting the wrong experiment.
+    """
+    if backend is None:
+        return False
+    required = VARIANT_BACKENDS.get(variant)
+    if required is None:
+        return False
+    info = backend.model_info
+    return info is not None and info.backend == required
 
 
 @dataclass

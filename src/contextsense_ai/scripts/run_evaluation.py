@@ -9,6 +9,7 @@ import sys
 from contextsense_ai.config import settings
 from contextsense_ai.embeddings.base import EmbeddingBackend
 from contextsense_ai.embeddings.sentence_transformer import SentenceTransformerBackend
+from contextsense_ai.embeddings.word2vec import Word2VecBackend
 from contextsense_ai.evaluation.datasets import load_csv_dataset, load_sample_dataset
 from contextsense_ai.evaluation.experiments import (
     DEFAULT_MODEL_VARIANTS,
@@ -44,13 +45,22 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _load_backend() -> EmbeddingBackend | None:
-    """Load the embedding backend, or None if it is unavailable.
+def _load_backend(variant: ModelVariant) -> EmbeddingBackend | None:
+    """Load the embedding backend the requested variant needs.
 
+    Each variant has its own model, so the backend is chosen from the variant
+    rather than always being Sentence Transformers. Loading the wrong one and
+    labelling it as the requested model would report the wrong experiment.
     The context-free baselines do not need embeddings, so an unavailable
     backend downgrades to baseline-only evaluation rather than aborting.
     """
-    backend = SentenceTransformerBackend()
+    if variant is ModelVariant.WORD2VEC_WORDNET:
+        backend: EmbeddingBackend = Word2VecBackend()
+    elif variant is ModelVariant.SENTENCE_TRANSFORMER_WORDNET:
+        backend = SentenceTransformerBackend()
+    else:
+        return None
+
     try:
         backend.load()
     except Exception as exc:
@@ -94,7 +104,6 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     strategy = ContextStrategy(args.context_strategy)
-    backend = _load_backend()
 
     print()
     print("Running evaluation...")
@@ -104,6 +113,10 @@ def main(argv: list[str] | None = None) -> None:
         variants = list(DEFAULT_MODEL_VARIANTS)
         print("Variants: " + ", ".join(v.display_name for v in variants))
         print()
+        # Every embedding variant in this list needs Sentence Transformers;
+        # the comparison refuses to run a variant against a backend that
+        # serves a different model.
+        backend = _load_backend(ModelVariant.SENTENCE_TRANSFORMER_WORDNET)
         result = run_model_comparison(
             examples=examples,
             embedding_backend=backend,
@@ -115,6 +128,7 @@ def main(argv: list[str] | None = None) -> None:
         )
     else:
         variant = ModelVariant(args.model)
+        backend = _load_backend(variant)
         if variant.requires_embedding and backend is None:
             print(f"'{variant.display_name}' requires an embedding model, which is unavailable.")
             sys.exit(1)

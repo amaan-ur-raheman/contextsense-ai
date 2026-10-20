@@ -39,7 +39,10 @@ class StubBackend(EmbeddingBackend):
     def model_info(self) -> EmbeddingModelInfo:
         return EmbeddingModelInfo(
             name="stub",
-            backend="stub",
+            # Declares which model it stands in for. A backend that serves no
+            # known variant is refused rather than silently substituted, so a
+            # stub used for the embedding variants has to say it is one.
+            backend="sentence_transformers",
             dimensions=self.dimensions,
             is_available=True,
         )
@@ -500,6 +503,45 @@ def test_word2vec_cache_identity_includes_the_vectors_file() -> None:
     # All three report the same model name, so the name alone cannot be the key.
     assert first != second, "different vector files produced the same cache identity"
     assert unloaded == backend.model_info.name
+
+
+def test_a_variant_refuses_a_backend_that_serves_another_model() -> None:
+    """A Word2Vec variant must not run on the Sentence Transformers backend.
+
+    ``disambiguate`` accepts any backend for any embedding variant, so
+    ``run_evaluation`` used to hand a Sentence Transformers backend to the
+    Word2Vec variant and report the result under a Word2Vec label. The
+    numbers were perfectly valid -- for a different experiment -- and nothing
+    downstream could tell.
+    """
+    from contextsense_ai.evaluation.experiments import run_evaluation
+    from contextsense_ai.exceptions import EvaluationError
+
+    with pytest.raises(EvaluationError):
+        run_evaluation(
+            load_sample_dataset(),
+            ModelVariant.WORD2VEC_WORDNET,
+            StubBackend(),
+        )
+
+
+def test_a_comparison_skips_variants_it_cannot_serve() -> None:
+    """A comparison must report the variant it skipped, not score it wrongly."""
+    result = run_model_comparison(
+        load_sample_dataset(),
+        StubBackend(),
+        model_variants=[
+            ModelVariant.FIRST_SENSE,
+            ModelVariant.WORD2VEC_WORDNET,
+            ModelVariant.SENTENCE_TRANSFORMER_WORDNET,
+        ],
+    )
+
+    # The stub serves the Sentence Transformers variant, not Word2Vec.
+    assert ModelVariant.FIRST_SENSE in result.per_model_results
+    assert ModelVariant.SENTENCE_TRANSFORMER_WORDNET in result.per_model_results
+    assert ModelVariant.WORD2VEC_WORDNET not in result.per_model_results
+    assert any("word2vec_wordnet" in s for s in result.config["skipped_variants"])
 
 
 def test_every_candidate_contains_the_target_as_a_lemma() -> None:

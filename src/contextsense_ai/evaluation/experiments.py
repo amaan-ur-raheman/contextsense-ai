@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from contextsense_ai.embeddings.base import EmbeddingBackend
+from contextsense_ai.embeddings.base import EmbeddingBackend, backend_serves_variant
 from contextsense_ai.exceptions import EvaluationError
 from contextsense_ai.schemas import (
     ContextStrategy,
@@ -62,6 +62,18 @@ def run_evaluation(
     """Run a full evaluation of one model variant on a dataset."""
     context_strategy = ContextStrategy(context_strategy)
     model_variant = ModelVariant(model_variant)
+
+    if model_variant.requires_embedding and not backend_serves_variant(
+        embedding_backend, model_variant
+    ):
+        # Loud, because this is a caller error: the backend cannot produce the
+        # model that was asked for. Running anyway would return a valid-looking
+        # result for a different experiment.
+        supplied = "none" if embedding_backend is None else embedding_backend.model_info.backend
+        raise EvaluationError(
+            f"Model variant '{model_variant.display_name}' needs its own embedding "
+            f"backend, but the one supplied ('{supplied}') does not serve it."
+        )
 
     prediction_list, metrics = evaluate_single_variant(
         examples=examples,
@@ -137,9 +149,17 @@ def run_model_comparison(
     skipped_variants: list[str] = []
 
     for variant in model_variants:
-        if variant.requires_embedding and embedding_backend is None:
-            skipped_variants.append(variant.value)
-            continue
+        if variant.requires_embedding:
+            # Refuse to run an embedding variant against a backend that serves
+            # a different model. Substituting one silently produces valid
+            # numbers for the wrong experiment -- a Word2Vec-labelled row
+            # holding Sentence Transformers results.
+            if embedding_backend is None:
+                skipped_variants.append(variant.value)
+                continue
+            if not backend_serves_variant(embedding_backend, variant):
+                skipped_variants.append(f"{variant.value} (wrong backend)")
+                continue
 
         prediction_list, metrics = evaluate_single_variant(
             examples=examples,
