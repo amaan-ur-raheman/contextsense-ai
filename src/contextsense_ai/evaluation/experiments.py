@@ -88,9 +88,7 @@ def run_evaluation(
     # skipped, so the two iterators line up exactly.
     predictions = {
         example.id: pred
-        for example, pred in zip(
-            (e for e in examples if e.is_valid), prediction_list, strict=True
-        )
+        for example, pred in zip((e for e in examples if e.is_valid), prediction_list, strict=True)
     }
 
     result = EvaluationResult(
