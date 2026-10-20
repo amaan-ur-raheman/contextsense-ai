@@ -30,6 +30,10 @@ data/processed/*.bin
 data/processed/*.gz
 data/*.bin
 data/*.gz
+# Pre-trained Word2Vec vectors (3.6 GB). The patterns above are anchored to
+# data/ and so do not reach into subdirectories -- without this line the
+# vectors file would be committable.
+data/word2vec/
 !data/sample_examples.json
 !data/README.md
 !data/.gitkeep
