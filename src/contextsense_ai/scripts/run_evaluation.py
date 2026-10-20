@@ -16,6 +16,7 @@ from contextsense_ai.evaluation.experiments import (
     run_evaluation,
     run_model_comparison,
 )
+from contextsense_ai.exceptions import EvaluationError
 from contextsense_ai.schemas import ContextStrategy, ModelVariant
 
 
@@ -84,7 +85,13 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.csv:
         print(f"Loading CSV dataset: {args.csv}")
-        examples = load_csv_dataset(args.csv)
+        try:
+            examples = load_csv_dataset(args.csv)
+        except EvaluationError as exc:
+            # A mistyped path is a user error, not a crash. Printing a traceback
+            # for it buries the message the user needs.
+            print(f"error: {exc}", file=sys.stderr)
+            sys.exit(1)
         dataset_name = args.csv
     else:
         print("Loading sample dataset...")
