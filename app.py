@@ -542,19 +542,28 @@ with st.sidebar:
     # Show live availability rather than a static list of what exists in theory.
     # A page that quietly omits a method is exactly the failure this panel
     # exists to prevent, so it has to be the place that explains the omission.
+    #
+    # "Installed" and "loaded" are different questions. is_available only
+    # reports a loaded model, so before the first prediction every backend
+    # looks absent -- and reporting Word2Vec as "not installed" when its
+    # vectors are sitting on disk is exactly the kind of false statement this
+    # panel is meant to eliminate.
     for name, label in (
         ("sentence_transformer", "Sentence Transformers"),
         ("word2vec", "Word2Vec (Google News)"),
     ):
         backend = get_backend(name)
         info = backend.model_info if backend else None
-        ready = bool(info and info.is_available)
-        if ready:
-            status = "ready"
+        loaded = bool(info and info.is_available)
+        installed = name == "word2vec" and _word2vec_installed()
+        if loaded:
+            status, ready = "ready", True
+        elif installed:
+            status, ready = "installed", True
         elif name == "sentence_transformer":
-            status = "downloads on first use"
+            status, ready = "downloads on first use", False
         else:
-            status = "not installed"
+            status, ready = "not installed", False
         st.markdown(f"{'✅' if ready else '⬜️'} **{label}** — {status}")
 
     if not _word2vec_installed():
